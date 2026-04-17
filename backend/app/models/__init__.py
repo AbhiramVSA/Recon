@@ -29,6 +29,20 @@ from app.domains.shop.models import (  # noqa: F401
     ShopItem, ShopItemBase,
     Redemption, RedemptionBase,
 )
+from app.domains.teams.models import (  # noqa: F401
+    Team,
+    TeamBase,
+    TeamMembership,
+    TeamMembershipBase,
+)
+from app.domains.treasure_hunt.models import (  # noqa: F401
+    TreasureHuntProblem,
+    TreasureHuntProblemBase,
+    TreasureHuntSolve,
+    TreasureHuntSolveBase,
+    TreasureHuntTeamProgress,
+    TreasureHuntTeamProgressBase,
+)
 
 from app.domains.schedule.models import (  # noqa: F401
     Session, SessionBase,
