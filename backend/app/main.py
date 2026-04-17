@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 import logfire
 import redis.asyncio as redis
-from fastapi import FastAPI, Depends, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -23,6 +23,15 @@ logfire.configure(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_allowed_origin(request: Request, response: JSONResponse) -> JSONResponse:
+    origin = request.headers.get("origin")
+    if origin and origin in settings.ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 @asynccontextmanager
@@ -72,10 +81,11 @@ logfire.instrument_redis()
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled exception: %s", exc, exc_info=True)
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
     )
+    return _apply_allowed_origin(request, response)
 
 
 # ── Middleware ────────────────────────────────────────────────

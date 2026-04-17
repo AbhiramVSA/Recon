@@ -116,3 +116,30 @@ def test_app_uses_hardened_session_and_trusted_host_middleware():
     assert session_middleware.kwargs["same_site"] == settings.SESSION_SAME_SITE
     assert session_middleware.kwargs["https_only"] == settings.SESSION_HTTPS_ONLY
     assert trusted_host_middleware.kwargs["allowed_hosts"] == settings.TRUSTED_HOSTS
+
+
+@pytest.mark.asyncio
+async def test_unhandled_500_keeps_cors_headers(auth_client, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOWED_ORIGINS", ["https://www.reconhq.tech"])
+
+    @app.get("/__test_cors_error")
+    async def __test_cors_error():
+        raise RuntimeError("boom")
+
+    try:
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            follow_redirects=False,
+        ) as cors_client:
+            response = await cors_client.get(
+                "/__test_cors_error",
+                headers={"Origin": "https://www.reconhq.tech"},
+            )
+    finally:
+        app.router.routes.pop()
+
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == "https://www.reconhq.tech"
+    assert response.headers["access-control-allow-credentials"] == "true"
