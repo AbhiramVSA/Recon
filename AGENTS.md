@@ -286,9 +286,11 @@ Audience-based top-level structure is complete and stable:
 - **`infrastructure/cache/`** — fully implemented: Redis helpers (get/set with TTL, pub/sub, sorted-set leaderboard, counters) + namespaced key builders. Service-only, no HTTP endpoints.
 - **`domains/auth/`** — fully implemented: Google OAuth, JWT tokens, refresh/logout, user CRUD, RBAC seeding, settings-driven OAuth/callback URLs
 - **`domains/announcements/`** — implemented: active feed + admin publish/edit/delete routes with expiry/pinning support
+- **`domains/teams/`** — implemented: reusable team creation, invite-code joins, roster reads; single source of truth for team ownership across event features
+- **`domains/treasure_hunt/`** — implemented: QR-token problem reveal, team flag submission, solve ledger, projected leaderboard, and first-four finisher tracking
 - **`admin/`** — scaffolded (horizontal layers: models/, schemas/, crud/, service/, controller/, router/, tests/)
 - **`partners/`** — scaffolded (horizontal layers: models/, schemas/, crud/, service/, controller/, router/, tests/)
-- Remaining participant domain folders (`zones/`, `shop/`, `schedule/`, `teams/`, `webhooks/`) are scaffolded (empty `__init__.py` files only)
+- Remaining participant domain folders (`schedule/`, `webhooks/`) are scaffolded (empty `__init__.py` files only)
 - `app/models/__init__.py` is the Alembic aggregator — import new domain models here when added
 - `api/v1/api.py` mounts all routers (domains + admin + partners + infrastructure)
 
@@ -305,7 +307,8 @@ Audience-based top-level structure is complete and stable:
 | incidents | Complete | Incident tracking layer: webhooks ingestion, ops assignment, and status lifecycle |
 | webhooks | Not started | n8n form payload ingestion |
 | shop | Complete (initial API) | Full catalogue + redemption store. Tables: `shop_items`, `redemptions`. 8 endpoints: `GET /shop` (list active), `GET /shop/{id}` (detail), `POST /shop/{id}/redeem` (participant redeem with request `idempotency_key`, balance check + stock lock), `GET /shop/me/redemptions` (own history), `GET /shop/redemptions` (admin list, filterable by fulfilled), `PATCH /shop/redemptions/{id}/fulfill` (admin fulfillment), `POST /shop` (admin create), `PATCH /shop/{id}` (admin update/toggle). Concurrent stock safety via `SELECT FOR UPDATE`. Points spending routes through the DB-backed points service with normalized reason codes `shop.redeem.<slug>`, while redemption rows enforce their own unique request idempotency via `redemptions.idempotency_key`. Mounts at `/api/v1/shop/`. Migration: `e6f7a8b9c0d1`. |
-| teams | Not started | Team formation and management |
+| teams | Complete (initial API) | Reusable team domain with `teams` + `team_memberships` tables. Endpoints: `POST /teams`, `POST /teams/join`, `GET /teams/me`. Participants can belong to exactly one team via unique membership on `participant_id`; invite codes are short operator-friendly codes stored on the team row. Migration: `18db06de1e12`. |
+| treasure_hunt | Complete (initial API) | QR-driven team challenge flow for 10 seeded cybersec problems. Tables: `treasure_hunt_problems`, `treasure_hunt_solves`, `treasure_hunt_team_progress`. Endpoints: `GET /treasure-hunt/scan/{qr_token}`, `POST /treasure-hunt/problems/{problem_id}/submit`, `GET /treasure-hunt/me/progress`, `GET /treasure-hunt/leaderboard`, `GET /treasure-hunt/finishers`. Solve writes are intentionally synchronous, not batched, because max throughput is only 3000 total solve events and prize-critical finish order needs immediate DB persistence. First-four finisher slots are claimed atomically through unique `finish_rank`; team progress acts as the leaderboard projection row. Seed/operator assets live under `DOCS/treasure_hunt/` with QR PNGs and manifest. Migration: `18db06de1e12`. |
 | announcements | Complete (initial API) | Active feed (`GET /announcements`, `GET /announcements/{id}`), admin publish/edit/delete (`POST /announcements`, `PATCH /announcements/{id}`, `DELETE /announcements/{id}`), fields: priority/published_at/expires_at/is_pinned/created_by. Table: `announcements`. Migrations: `d1f2a3b4c5d6`, repair drift migration `1dff7bf50d72`. Realtime pub/sub events published on create/update/delete to Redis channel `announcements.live`. |
 
 ### Admin Status
