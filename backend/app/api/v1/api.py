@@ -9,6 +9,8 @@ from app.infrastructure.storage.router import router as r2_router
 from app.partners.router import router as partners_router
 from app.domains.shop.router import router as shop_router
 from app.domains.schedule.router.schedule_router import router as schedule_router
+from app.domains.teams.router import router as teams_router
+from app.domains.treasure_hunt.router import router as treasure_hunt_router
 
 router = APIRouter()
 
@@ -21,3 +23,5 @@ router.include_router(r2_router)
 router.include_router(partners_router)
 router.include_router(shop_router)
 router.include_router(schedule_router)
+router.include_router(teams_router)
+router.include_router(treasure_hunt_router)

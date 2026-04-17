@@ -1,0 +1,52 @@
+[
+  {
+    "title": "Shifted SSID",
+    "qr_token": "th-01-shifted-ssid",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-01-shifted-ssid"
+  },
+  {
+    "title": "Badge B64",
+    "qr_token": "th-02-badge-b64",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-02-badge-b64"
+  },
+  {
+    "title": "Redirect Maze",
+    "qr_token": "th-03-redirect-maze",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-03-redirect-maze"
+  },
+  {
+    "title": "Packet Hex",
+    "qr_token": "th-04-packet-hex",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-04-packet-hex"
+  },
+  {
+    "title": "Binary Buzz",
+    "qr_token": "th-05-binary-buzz",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-05-binary-buzz"
+  },
+  {
+    "title": "ROT13 Breach",
+    "qr_token": "th-06-rot13-breach",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-06-rot13-breach"
+  },
+  {
+    "title": "Leet Locker",
+    "qr_token": "th-07-leet-locker",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-07-leet-locker"
+  },
+  {
+    "title": "Cookie Crumbs",
+    "qr_token": "th-08-cookie-crumbs",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-08-cookie-crumbs"
+  },
+  {
+    "title": "Header Hunt",
+    "qr_token": "th-09-header-hunt",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-09-header-hunt"
+  },
+  {
+    "title": "Reverse Rumor",
+    "qr_token": "th-10-reverse-rumor",
+    "scan_url": "https://event.example.com/api/v1/treasure-hunt/scan/th-10-reverse-rumor"
+  }
+]
