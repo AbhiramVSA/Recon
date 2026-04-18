@@ -19,6 +19,13 @@ async def _create_participant(client, auth_override, user, display_name: str) ->
     return uuid.UUID(response.json()["id"])
 
 
+async def _create_team(client, auth_override, user, name: str) -> dict:
+    auth_override(user)
+    response = await client.post("/api/v1/teams/", json={"name": name})
+    assert response.status_code == 201
+    return response.json()
+
+
 @pytest.mark.asyncio
 async def test_award_points_and_get_my_balance(client, auth_override, create_user):
     admin = await create_user(role_name=ROLE_ADMIN, email="admin_points_1@example.com", username="adminp1")
@@ -534,3 +541,200 @@ async def test_leaderboard_me_compat_alias_matches_points_endpoint(client, auth_
     assert canonical.status_code == 200
     assert compat.status_code == 200
     assert compat.json() == canonical.json()
+
+
+@pytest.mark.asyncio
+async def test_team_competition_delta_award_updates_team_summary_and_leaderboard(
+    client, auth_override, create_user
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="admin_points_team_1@example.com", username="adminteam1")
+    player = await create_user(email="player_points_team_1@example.com", username="playerteam1")
+
+    await _create_participant(client, auth_override, player, "team-player-1")
+    team = await _create_team(client, auth_override, player, "KOTH Crew")
+
+    auth_override(admin)
+    award = await client.post(
+        "/api/v1/points/team-events/award-delta",
+        json={
+            "team_id": team["id"],
+            "event_key": "koth",
+            "round_key": "round-1",
+            "raw_score_delta": 60,
+            "raw_score_ceiling": 360,
+            "normalized_points_ceiling": 300,
+            "source": "koth.tick",
+            "source_reference": "tick-batch-1",
+            "idempotency_key": "team-delta-1",
+        },
+    )
+    assert award.status_code == 201
+    assert award.json()["round_score"]["raw_score_total"] == 60
+    assert award.json()["round_score"]["normalized_points_total"] == 50
+
+    auth_override(player)
+    me = await client.get("/api/v1/points/team-events/me")
+    assert me.status_code == 200
+    assert me.json()["team_name"] == "KOTH Crew"
+    assert me.json()["normalized_points"] == 50
+    assert me.json()["event_summaries"] == [
+        {
+            "event_key": "koth",
+            "normalized_points": 50,
+            "raw_score_total": 60,
+        }
+    ]
+
+    board = await client.get("/api/v1/points/team-events/leaderboard")
+    assert board.status_code == 200
+    assert board.json()["entries"][0]["team_name"] == "KOTH Crew"
+    assert board.json()["entries"][0]["normalized_points"] == 50
+
+
+@pytest.mark.asyncio
+async def test_team_competition_snapshot_requires_monotonic_scores_and_explicit_koth_ceiling(
+    client, auth_override, create_user
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="admin_points_team_2@example.com", username="adminteam2")
+    player = await create_user(email="player_points_team_2@example.com", username="playerteam2")
+
+    await _create_participant(client, auth_override, player, "team-player-2")
+    team = await _create_team(client, auth_override, player, "CTF Crew")
+
+    auth_override(admin)
+    missing_koth_ceiling = await client.post(
+        "/api/v1/points/team-events/ingest-snapshot",
+        json={
+            "team_id": team["id"],
+            "event_key": "koth",
+            "round_key": "qualifier",
+            "raw_score_total": 12,
+            "source": "koth.snapshot",
+            "source_reference": "snapshot-0",
+            "idempotency_key": "team-snapshot-koth-missing-cap",
+        },
+    )
+    assert missing_koth_ceiling.status_code == 400
+    assert "raw_score_ceiling is required" in missing_koth_ceiling.json()["detail"]
+
+    first = await client.post(
+        "/api/v1/points/team-events/ingest-snapshot",
+        json={
+            "team_id": team["id"],
+            "event_key": "ctf",
+            "round_key": "finals",
+            "raw_score_total": 4750,
+            "source": "ctfd.snapshot",
+            "source_reference": "snapshot-1",
+            "idempotency_key": "team-snapshot-1",
+        },
+    )
+    assert first.status_code == 201
+    assert first.json()["round_score"]["normalized_points_total"] == 250
+
+    lower = await client.post(
+        "/api/v1/points/team-events/ingest-snapshot",
+        json={
+            "team_id": team["id"],
+            "event_key": "ctf",
+            "round_key": "finals",
+            "raw_score_total": 4700,
+            "source": "ctfd.snapshot",
+            "source_reference": "snapshot-2",
+            "idempotency_key": "team-snapshot-2",
+        },
+    )
+    assert lower.status_code == 409
+    assert "cannot decrease" in lower.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_team_competition_rules_endpoint_is_available_to_authenticated_users(
+    client, auth_override, create_user
+):
+    player = await create_user(email="player_points_team_rules@example.com", username="playerteamrules")
+    auth_override(player)
+    response = await client.get("/api/v1/points/team-events/rules")
+    assert response.status_code == 200
+    keys = {rule["event_key"] for rule in response.json()["rules"]}
+    assert keys == {"ctf", "koth", "treasure_hunt"}
+
+
+@pytest.mark.asyncio
+async def test_team_competition_settlement_previews_and_mints_participant_points(
+    client, auth_override, create_user
+):
+    admin = await create_user(
+        role_name=ROLE_ADMIN,
+        email="admin_points_team_settle@example.com",
+        username="adminteamsettle",
+    )
+    player_a = await create_user(email="player_points_team_settle_a@example.com", username="playerteamsettlea")
+    player_b = await create_user(email="player_points_team_settle_b@example.com", username="playerteamsettleb")
+
+    participant_a = await _create_participant(client, auth_override, player_a, "settle-a")
+    await _create_participant(client, auth_override, player_b, "settle-b")
+
+    team = await _create_team(client, auth_override, player_a, "Settlement Squad")
+    auth_override(player_b)
+    joined = await client.post("/api/v1/teams/join", json={"invite_code": team["invite_code"]})
+    assert joined.status_code == 200
+
+    auth_override(admin)
+    awarded = await client.post(
+        "/api/v1/points/team-events/ingest-snapshot",
+        json={
+            "team_id": team["id"],
+            "event_key": "ctf",
+            "round_key": "finals",
+            "raw_score_total": 4750,
+            "source": "ctfd.snapshot",
+            "source_reference": "settlement-snapshot-1",
+            "idempotency_key": "settlement-snapshot-idem-1",
+        },
+    )
+    assert awarded.status_code == 201
+    assert awarded.json()["round_score"]["normalized_points_total"] == 250
+
+    preview = await client.post(
+        "/api/v1/points/team-events/settlements/preview",
+        json={
+            "team_id": team["id"],
+            "event_key": "ctf",
+            "round_key": "finals",
+            "participant_points_budget": 7,
+        },
+    )
+    assert preview.status_code == 200
+    preview_json = preview.json()
+    assert preview_json["participant_points_budget"] == 7
+    assert [allocation["allocated_points"] for allocation in preview_json["allocations"]] == [4, 3]
+
+    finalized = await client.post(
+        "/api/v1/points/team-events/settlements",
+        json={
+            "team_id": team["id"],
+            "event_key": "ctf",
+            "round_key": "finals",
+            "participant_points_budget": 7,
+            "idempotency_key": "team-settlement-finalize-1",
+        },
+    )
+    assert finalized.status_code == 201
+    finalized_json = finalized.json()
+    assert finalized_json["source_normalized_points_total"] == 250
+    assert [allocation["allocated_points"] for allocation in finalized_json["allocations"]] == [4, 3]
+
+    settlements = await client.get("/api/v1/points/team-events/settlements?event_key=ctf")
+    assert settlements.status_code == 200
+    assert len(settlements.json()["settlements"]) == 1
+
+    auth_override(player_a)
+    me_a = await client.get("/api/v1/points/me")
+    assert me_a.status_code == 200
+    assert me_a.json()["balance"] == 4
+
+    auth_override(player_b)
+    me_b = await client.get("/api/v1/points/me")
+    assert me_b.status_code == 200
+    assert me_b.json()["balance"] == 3

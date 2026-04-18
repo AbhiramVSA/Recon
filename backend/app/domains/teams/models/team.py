@@ -13,4 +13,8 @@ class TeamBase(SQLModel):
 class Team(Base, TeamBase, table=True):
     __tablename__ = "teams"
 
-    created_by_participant_id: uuid.UUID = Field(foreign_key="participants.id", index=True)
+    created_by_participant_id: uuid.UUID | None = Field(
+        default=None,
+        foreign_key="participants.id",
+        index=True,
+    )

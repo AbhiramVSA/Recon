@@ -447,3 +447,147 @@ async def test_postgres_concurrent_same_redeem_idempotency_returns_same_redempti
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r1.json()["id"] == r2.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_postgres_concurrent_team_event_deltas_same_team_are_atomic(
+    pg_client, pg_create_user
+):
+    admin = await pg_create_user(email="pg-team-admin@example.com", username="pgteamadmin", role_name=ROLE_ADMIN)
+    player = await pg_create_user(email="pg-team-player@example.com", username="pgteamplayer")
+
+    _set_auth_cookie(pg_client, player, ROLE_PARTICIPANT)
+    profile = await pg_client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "pg-team", "institution": "VIT-AP", "year": 2},
+    )
+    assert profile.status_code == 201
+
+    team = await pg_client.post("/api/v1/teams/", json={"name": "PG Atomic Team"})
+    assert team.status_code == 201
+    team_id = team.json()["id"]
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=True
+    ) as client_a, AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=True
+    ) as client_b:
+        _set_auth_cookie(client_a, admin, ROLE_ADMIN)
+        _set_auth_cookie(client_b, admin, ROLE_ADMIN)
+        r1, r2 = await asyncio.gather(
+            client_a.post(
+                "/api/v1/points/team-events/award-delta",
+                json={
+                    "team_id": team_id,
+                    "event_key": "koth",
+                    "round_key": "round-1",
+                    "raw_score_delta": 60,
+                    "raw_score_ceiling": 360,
+                    "normalized_points_ceiling": 300,
+                    "source": "koth.tick",
+                    "source_reference": "pg-koth-batch-1",
+                    "idempotency_key": str(uuid.uuid4()),
+                },
+            ),
+            client_b.post(
+                "/api/v1/points/team-events/award-delta",
+                json={
+                    "team_id": team_id,
+                    "event_key": "koth",
+                    "round_key": "round-1",
+                    "raw_score_delta": 30,
+                    "raw_score_ceiling": 360,
+                    "normalized_points_ceiling": 300,
+                    "source": "koth.tick",
+                    "source_reference": "pg-koth-batch-2",
+                    "idempotency_key": str(uuid.uuid4()),
+                },
+            ),
+        )
+    assert r1.status_code == 201
+    assert r2.status_code == 201
+
+    _set_auth_cookie(pg_client, player, ROLE_PARTICIPANT)
+    me = await pg_client.get("/api/v1/points/team-events/me")
+    assert me.status_code == 200
+    assert me.json()["normalized_points"] == 75
+
+
+@pytest.mark.asyncio
+async def test_postgres_concurrent_team_settlement_same_idempotency_is_single_effect(
+    pg_client, pg_create_user
+):
+    admin = await pg_create_user(
+        email="pg-team-settle-admin@example.com",
+        username="pgteamsettleadmin",
+        role_name=ROLE_ADMIN,
+    )
+    player_a = await pg_create_user(email="pg-team-settle-a@example.com", username="pgteamsettlea")
+    player_b = await pg_create_user(email="pg-team-settle-b@example.com", username="pgteamsettleb")
+
+    for user, display_name in ((player_a, "pg-settle-a"), (player_b, "pg-settle-b")):
+        _set_auth_cookie(pg_client, user, ROLE_PARTICIPANT)
+        profile = await pg_client.post(
+            "/api/v1/participants/me",
+            json={"display_name": display_name, "institution": "VIT-AP", "year": 2},
+        )
+        assert profile.status_code == 201
+
+    _set_auth_cookie(pg_client, player_a, ROLE_PARTICIPANT)
+    team = await pg_client.post("/api/v1/teams/", json={"name": "PG Settle Team"})
+    assert team.status_code == 201
+    invite_code = team.json()["invite_code"]
+    team_id = team.json()["id"]
+
+    _set_auth_cookie(pg_client, player_b, ROLE_PARTICIPANT)
+    joined = await pg_client.post("/api/v1/teams/join", json={"invite_code": invite_code})
+    assert joined.status_code == 200
+
+    _set_auth_cookie(pg_client, admin, ROLE_ADMIN)
+    score = await pg_client.post(
+        "/api/v1/points/team-events/ingest-snapshot",
+        json={
+            "team_id": team_id,
+            "event_key": "ctf",
+            "round_key": "finals",
+            "raw_score_total": 4750,
+            "source": "ctfd.snapshot",
+            "source_reference": "pg-settle-snapshot-1",
+            "idempotency_key": str(uuid.uuid4()),
+        },
+    )
+    assert score.status_code == 201
+
+    idem_key = str(uuid.uuid4())
+    payload = {
+        "team_id": team_id,
+        "event_key": "ctf",
+        "round_key": "finals",
+        "participant_points_budget": 11,
+        "idempotency_key": idem_key,
+    }
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=True
+    ) as client_a, AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=True
+    ) as client_b:
+        _set_auth_cookie(client_a, admin, ROLE_ADMIN)
+        _set_auth_cookie(client_b, admin, ROLE_ADMIN)
+        r1, r2 = await asyncio.gather(
+            client_a.post("/api/v1/points/team-events/settlements", json=payload),
+            client_b.post("/api/v1/points/team-events/settlements", json=payload),
+        )
+    assert r1.status_code == 201
+    assert r2.status_code == 201
+    assert r1.json()["id"] == r2.json()["id"]
+
+    _set_auth_cookie(pg_client, player_a, ROLE_PARTICIPANT)
+    me_a = await pg_client.get("/api/v1/points/me")
+    _set_auth_cookie(pg_client, player_b, ROLE_PARTICIPANT)
+    me_b = await pg_client.get("/api/v1/points/me")
+    assert me_a.status_code == 200
+    assert me_b.status_code == 200
+    assert me_a.json()["balance"] + me_b.json()["balance"] == 11

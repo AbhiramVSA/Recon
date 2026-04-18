@@ -83,6 +83,17 @@ async def test_scan_and_submit_correct_flag_updates_progress(
     solved = {item["slug"]: item["solved"] for item in body["problems"]}
     assert solved["shifted-ssid"] is True
 
+    team_points = await client.get("/api/v1/points/team-events/me")
+    assert team_points.status_code == 200
+    assert team_points.json()["normalized_points"] == 16
+    assert team_points.json()["event_summaries"] == [
+        {
+            "event_key": "treasure_hunt",
+            "normalized_points": 16,
+            "raw_score_total": 100,
+        }
+    ]
+
 
 @pytest.mark.asyncio
 async def test_duplicate_submit_is_idempotent_for_same_team_and_problem(

@@ -10,14 +10,34 @@ from app.domains.points.schemas import (
     PointLeaderboardMeRead,
     PointLeaderboardPageRead,
     PointMeRead,
+    TeamCompetitionAwardDeltaCreate,
+    TeamCompetitionAwardRead,
+    TeamCompetitionLeaderboardPageRead,
+    TeamCompetitionMeRead,
+    TeamCompetitionRulesRead,
+    TeamCompetitionSettlementFinalizeCreate,
+    TeamCompetitionSettlementListRead,
+    TeamCompetitionSettlementPreviewCreate,
+    TeamCompetitionSettlementPreviewRead,
+    TeamCompetitionSettlementRead,
+    TeamCompetitionSnapshotIngestCreate,
     PointTransactionsPageRead,
 )
 from app.domains.points.service import (
     award_points,
+    award_team_competition_delta,
+    finalize_team_competition_settlement,
     get_leaderboard,
     get_my_points_summary,
     get_my_rank,
+    get_my_team_competition_summary,
+    get_team_competition_leaderboard,
+    get_team_competition_rules,
+    get_team_competition_settlement,
     get_transactions_for_admin,
+    ingest_team_competition_snapshot,
+    list_team_competition_settlements,
+    preview_team_competition_settlement,
     serialize_transaction,
 )
 
@@ -67,3 +87,75 @@ async def transactions(
         skip=skip,
         limit=limit,
     )
+
+
+async def team_award_delta(
+    db: AsyncSession,
+    *,
+    payload: TeamCompetitionAwardDeltaCreate,
+    actor: User,
+) -> TeamCompetitionAwardRead:
+    return await award_team_competition_delta(db, payload=payload, actor=actor)
+
+
+async def team_ingest_snapshot(
+    db: AsyncSession,
+    *,
+    payload: TeamCompetitionSnapshotIngestCreate,
+    actor: User,
+) -> TeamCompetitionAwardRead:
+    return await ingest_team_competition_snapshot(db, payload=payload, actor=actor)
+
+
+async def team_leaderboard(
+    db: AsyncSession,
+    *,
+    skip: int,
+    limit: int,
+    event_key: str | None,
+) -> TeamCompetitionLeaderboardPageRead:
+    return await get_team_competition_leaderboard(
+        db, skip=skip, limit=limit, event_key=event_key
+    )
+
+
+async def team_me(db: AsyncSession, *, user: User) -> TeamCompetitionMeRead:
+    return await get_my_team_competition_summary(db, user=user)
+
+
+async def team_rules() -> TeamCompetitionRulesRead:
+    return get_team_competition_rules()
+
+
+async def team_settlement_preview(
+    db: AsyncSession,
+    *,
+    payload: TeamCompetitionSettlementPreviewCreate,
+) -> TeamCompetitionSettlementPreviewRead:
+    return await preview_team_competition_settlement(db, payload=payload)
+
+
+async def team_settlement_finalize(
+    db: AsyncSession,
+    *,
+    payload: TeamCompetitionSettlementFinalizeCreate,
+    actor: User,
+) -> TeamCompetitionSettlementRead:
+    return await finalize_team_competition_settlement(db, payload=payload, actor=actor)
+
+
+async def team_settlements(
+    db: AsyncSession,
+    *,
+    team_id: uuid.UUID | None,
+    event_key: str | None,
+) -> TeamCompetitionSettlementListRead:
+    return await list_team_competition_settlements(
+        db, team_id=team_id, event_key=event_key
+    )
+
+
+async def team_settlement_by_id(
+    db: AsyncSession, *, settlement_id: uuid.UUID
+) -> TeamCompetitionSettlementRead:
+    return await get_team_competition_settlement(db, settlement_id=settlement_id)

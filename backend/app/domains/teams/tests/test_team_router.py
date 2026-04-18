@@ -53,28 +53,41 @@ async def test_join_team_with_invite_code(client, auth_override, create_user):
 
 
 @pytest.mark.asyncio
-async def test_participant_cannot_create_second_team_or_join_when_already_member(
+async def test_participant_cannot_use_self_service_twice_even_after_admin_removal(
     client, auth_override, create_user
 ):
-    owner = await create_user(email="second-owner@example.com", username="secondowner")
-    other = await create_user(email="second-other@example.com", username="secondother")
-    await _create_participant(client, auth_override, owner, "owner-two")
-    await _create_participant(client, auth_override, other, "other-two")
+    admin = await create_user(
+        role_name=ROLE_ADMIN,
+        email="team-admin-lock@example.com",
+        username="teamadminlock",
+    )
+    owner = await create_user(email="team-lock-owner@example.com", username="teamlockowner")
+    other = await create_user(email="team-lock-other@example.com", username="teamlockother")
+
+    owner_participant_id = await _create_participant(client, auth_override, owner, "owner-lock")
+    await _create_participant(client, auth_override, other, "other-lock")
 
     auth_override(owner)
-    create_team = await client.post("/api/v1/teams/", json={"name": "First Team"})
-    assert create_team.status_code == 201
-
-    second_team = await client.post("/api/v1/teams/", json={"name": "Second Team"})
-    assert second_team.status_code == 409
+    first_team = await client.post("/api/v1/teams/", json={"name": "First Team"})
+    assert first_team.status_code == 201
 
     auth_override(other)
-    other_team = await client.post("/api/v1/teams/", json={"name": "Other Team"})
-    invite_code = other_team.json()["invite_code"]
+    second_team = await client.post("/api/v1/teams/", json={"name": "Second Team"})
+    assert second_team.status_code == 201
+    invite_code = second_team.json()["invite_code"]
+
+    auth_override(admin)
+    removal = await client.put(
+        f"/api/v1/teams/admin/participants/{owner_participant_id}/team",
+        json={"target_team_id": None},
+    )
+    assert removal.status_code == 200
+    assert removal.json()["team_id"] is None
 
     auth_override(owner)
     join_attempt = await client.post("/api/v1/teams/join", json={"invite_code": invite_code})
     assert join_attempt.status_code == 409
+    assert "self-service has already been used" in join_attempt.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -88,22 +101,106 @@ async def test_join_team_rejects_unknown_invite_code(client, auth_override, crea
 
 
 @pytest.mark.asyncio
-async def test_admin_with_participant_profile_can_create_and_view_team(
+async def test_admin_team_crud_and_member_assignment(client, auth_override, create_user):
+    admin = await create_user(
+        role_name=ROLE_ADMIN,
+        email="team-admin-manage@example.com",
+        username="teamadminmanage",
+    )
+    player_a = await create_user(email="team-admin-a@example.com", username="teamadmina")
+    player_b = await create_user(email="team-admin-b@example.com", username="teamadminb")
+
+    participant_a = await _create_participant(client, auth_override, player_a, "alpha-admin")
+    participant_b = await _create_participant(client, auth_override, player_b, "beta-admin")
+
+    auth_override(admin)
+    created = await client.post(
+        "/api/v1/teams/admin",
+        json={
+            "name": "Ops Allocated",
+            "member_participant_ids": [participant_a],
+        },
+    )
+    assert created.status_code == 201
+    team_id = created.json()["id"]
+    assert {member["display_name"] for member in created.json()["members"]} == {"alpha-admin"}
+
+    listing = await client.get("/api/v1/teams/admin")
+    assert listing.status_code == 200
+    assert any(team["id"] == team_id for team in listing.json()["teams"])
+
+    reassigned = await client.put(
+        f"/api/v1/teams/admin/participants/{participant_b}/team",
+        json={"target_team_id": team_id},
+    )
+    assert reassigned.status_code == 200
+    assert reassigned.json()["team_id"] == team_id
+
+    updated = await client.patch(
+        f"/api/v1/teams/admin/{team_id}",
+        json={"name": "Ops Final", "regenerate_invite_code": True},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Ops Final"
+    assert {member["display_name"] for member in updated.json()["members"]} == {
+        "alpha-admin",
+        "beta-admin",
+    }
+
+    fetched = await client.get(f"/api/v1/teams/admin/{team_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["name"] == "Ops Final"
+
+    removed = await client.put(
+        f"/api/v1/teams/admin/participants/{participant_a}/team",
+        json={"target_team_id": None},
+    )
+    assert removed.status_code == 200
+    assert removed.json()["team_id"] is None
+
+    removed_b = await client.put(
+        f"/api/v1/teams/admin/participants/{participant_b}/team",
+        json={"target_team_id": None},
+    )
+    assert removed_b.status_code == 200
+
+    deleted = await client.delete(f"/api/v1/teams/admin/{team_id}")
+    assert deleted.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_delete_team_with_competition_history(
     client, auth_override, create_user
 ):
     admin = await create_user(
         role_name=ROLE_ADMIN,
-        email="team-admin@example.com",
-        username="teamadmin",
+        email="team-admin-history@example.com",
+        username="teamadminhistory",
     )
-    await _create_participant(client, auth_override, admin, "team-admin")
+    player = await create_user(email="team-history@example.com", username="teamhistory")
+
+    await _create_participant(client, auth_override, player, "history-player")
+    auth_override(player)
+    created_team = await client.post("/api/v1/teams/", json={"name": "History Team"})
+    assert created_team.status_code == 201
+    team_id = created_team.json()["id"]
 
     auth_override(admin)
-    create_team = await client.post("/api/v1/teams/", json={"name": "Admin Operators"})
+    award = await client.post(
+        "/api/v1/points/team-events/award-delta",
+        json={
+            "team_id": team_id,
+            "event_key": "koth",
+            "round_key": "round-1",
+            "raw_score_delta": 30,
+            "raw_score_ceiling": 300,
+            "normalized_points_ceiling": 300,
+            "source": "koth.tick",
+            "idempotency_key": "team-history-delta-1",
+        },
+    )
+    assert award.status_code == 201
 
-    assert create_team.status_code == 201
-    assert create_team.json()["name"] == "Admin Operators"
-
-    my_team = await client.get("/api/v1/teams/me")
-    assert my_team.status_code == 200
-    assert my_team.json()["name"] == "Admin Operators"
+    deleted = await client.delete(f"/api/v1/teams/admin/{team_id}")
+    assert deleted.status_code == 409
+    assert "competition history" in deleted.json()["detail"]

@@ -22,6 +22,7 @@ class Participant(Base, ParticipantBase, table=True):
 
     talent_visible: bool = Field(default=False)
     talent_contact_shareable: bool = Field(default=False)
+    team_self_service_locked: bool = Field(default=False, index=True)
     checked_in_at: datetime | None = Field(default=None)
     checked_in_by: uuid.UUID | None = Field(default=None, foreign_key="users.id")
     user_id: uuid.UUID = Field(foreign_key="users.id", unique=True, index=True)

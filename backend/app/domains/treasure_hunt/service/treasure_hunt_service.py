@@ -7,6 +7,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domains.auth.models import User
+from app.domains.points.schemas import TeamCompetitionAwardDeltaCreate
+from app.domains.points.service import award_team_competition_delta
+from app.domains.points.service.competition_rules import (
+    TREASURE_HUNT_EVENT_KEY,
+    TREASURE_HUNT_FINISH_BONUS_RAW_POINTS,
+    TREASURE_HUNT_MAIN_ROUND_KEY,
+    TREASURE_HUNT_SOLVE_RAW_POINTS,
+)
 from app.domains.teams.service import get_team_context_for_user
 from app.domains.treasure_hunt import crud
 from app.domains.treasure_hunt.models import TreasureHuntTeamProgress
@@ -145,10 +153,41 @@ async def submit_flag(
     progress = await _lock_team_progress(db, team_id=team.id)
     progress.solved_count += 1
     progress.last_solved_at = solve.solved_at
+    just_completed = False
     if progress.solved_count >= total_problems and progress.completed_at is None:
         progress.completed_at = solve.solved_at
         progress.finish_rank = await _claim_finish_rank(db, progress)
+        just_completed = True
     progress = await crud.save_team_progress(db, progress=progress)
+    await award_team_competition_delta(
+        db,
+        payload=TeamCompetitionAwardDeltaCreate(
+            team_id=team.id,
+            event_key=TREASURE_HUNT_EVENT_KEY,
+            round_key=TREASURE_HUNT_MAIN_ROUND_KEY,
+            raw_score_delta=TREASURE_HUNT_SOLVE_RAW_POINTS,
+            source="treasure_hunt.solve",
+            source_reference=str(solve.id),
+            idempotency_key=f"treasure-hunt.solve:{solve.id}",
+            details_json={"problem_id": str(problem.id)},
+        ),
+        actor=user,
+    )
+    if just_completed and progress.finish_rank in TREASURE_HUNT_FINISH_BONUS_RAW_POINTS:
+        await award_team_competition_delta(
+            db,
+            payload=TeamCompetitionAwardDeltaCreate(
+                team_id=team.id,
+                event_key=TREASURE_HUNT_EVENT_KEY,
+                round_key=TREASURE_HUNT_MAIN_ROUND_KEY,
+                raw_score_delta=TREASURE_HUNT_FINISH_BONUS_RAW_POINTS[progress.finish_rank],
+                source="treasure_hunt.finish_bonus",
+                source_reference=str(progress.finish_rank),
+                idempotency_key=f"treasure-hunt.finish:{team.id}:{progress.finish_rank}",
+                details_json={"finish_rank": progress.finish_rank},
+            ),
+            actor=user,
+        )
 
     return _build_submit_response(
         status_name="solved",

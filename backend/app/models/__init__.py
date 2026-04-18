@@ -24,6 +24,14 @@ from app.domains.points.models import (  # noqa: F401
     ParticipantPoints,
     PointLedger,
     PointLedgerBase,
+    TeamCompetitionLedger,
+    TeamCompetitionLedgerBase,
+    TeamCompetitionRoundScore,
+    TeamCompetitionRoundScoreBase,
+    TeamCompetitionSettlement,
+    TeamCompetitionSettlementBase,
+    TeamCompetitionSettlementAllocation,
+    TeamCompetitionSettlementAllocationBase,
 )
 from app.domains.shop.models import (  # noqa: F401
     ShopItem, ShopItemBase,
