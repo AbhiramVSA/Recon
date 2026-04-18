@@ -5,6 +5,7 @@ from threading import Lock
 from fastapi import HTTPException
 
 from app.core.config import settings
+from app.domains.auth.service.helpers import is_bootstrap_admin_email
 
 
 def normalize_google_oauth_email(email: str) -> str:
@@ -71,9 +72,10 @@ def clear_google_oauth_allowlist_cache() -> None:
 
 def ensure_google_oauth_email_allowed(email: str) -> str:
     normalized = normalize_google_oauth_email(email)
-    if normalized not in load_google_oauth_allowlist():
-        raise HTTPException(
-            status_code=403,
-            detail="Nice try, but this Google account isn't on the guest list.",
-        )
-    return normalized
+    allowed_emails = load_google_oauth_allowlist()
+    if normalized in allowed_emails or is_bootstrap_admin_email(normalized):
+        return normalized
+    raise HTTPException(
+        status_code=403,
+        detail="Nice try, but this Google account isn't on the guest list.",
+    )

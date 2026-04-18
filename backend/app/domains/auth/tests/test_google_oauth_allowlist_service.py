@@ -61,3 +61,22 @@ def test_ensure_google_oauth_email_allowed_normalizes_case(monkeypatch, tmp_path
 
     assert ensure_google_oauth_email_allowed(" Allowed@Example.com ") == "allowed@example.com"
     clear_google_oauth_allowlist_cache()
+
+
+def test_ensure_google_oauth_email_allowed_accepts_bootstrap_admin_outside_file_allowlist(
+    monkeypatch, tmp_path: Path
+):
+    allowlist = tmp_path / "google_oauth_allowlist.txt"
+    allowlist.write_text("allowed@example.com\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "app.domains.auth.service.google_oauth_allowlist_service.settings.GOOGLE_OAUTH_ALLOWLIST_PATH",
+        allowlist,
+    )
+    monkeypatch.setattr(
+        "app.domains.auth.service.google_oauth_allowlist_service.settings.BOOTSTRAP_ADMIN_EMAILS",
+        ["bootstrap-admin@example.com"],
+    )
+    clear_google_oauth_allowlist_cache()
+
+    assert ensure_google_oauth_email_allowed(" Bootstrap-Admin@Example.com ") == "bootstrap-admin@example.com"
+    clear_google_oauth_allowlist_cache()

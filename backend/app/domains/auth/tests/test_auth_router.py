@@ -127,6 +127,34 @@ async def test_google_callback_rejects_email_outside_allowlist(auth_client, monk
 
 
 @pytest.mark.asyncio
+async def test_google_callback_allows_bootstrap_admin_outside_file_allowlist(
+    auth_client, monkeypatch, tmp_path: Path
+):
+    allowlist = tmp_path / "google_oauth_allowlist.txt"
+    allowlist.write_text("allowed@example.com\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "GOOGLE_OAUTH_ALLOWLIST_PATH", allowlist)
+    monkeypatch.setattr(settings, "BOOTSTRAP_ADMIN_EMAILS", ["bootstrap-admin@example.com"])
+    monkeypatch.setattr(settings, "FRONTEND_REDIRECT_AFTER_LOGIN", "https://reconhq.tech/auth/callback")
+    clear_google_oauth_allowlist_cache()
+
+    async def fake_authorize_access_token(request):
+        return {"userinfo": {"sub": "bootstrap-admin-user", "email": "Bootstrap-Admin@Example.com"}}
+
+    async def fake_issue_tokens(user, response, db):
+        response.set_cookie("access_token", "test-access-token")
+
+    monkeypatch.setattr(oauth.google, "authorize_access_token", fake_authorize_access_token)
+    monkeypatch.setattr("app.domains.auth.router.auth_router.issue_tokens", fake_issue_tokens)
+
+    response = await auth_client.get("/api/v1/auth/google/callback")
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://reconhq.tech/auth/callback"
+    assert "access_token=test-access-token" in response.headers["set-cookie"]
+    clear_google_oauth_allowlist_cache()
+
+
+@pytest.mark.asyncio
 async def test_register_user_assigns_admin_role_for_bootstrap_email(session_factory, seeded_roles, monkeypatch):
     monkeypatch.setattr(settings, "BOOTSTRAP_ADMIN_EMAILS", ["bootstrap-admin@example.com"])
 
