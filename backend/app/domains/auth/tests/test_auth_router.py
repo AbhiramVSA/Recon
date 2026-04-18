@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -11,6 +12,7 @@ from app.core.config import ModeEnum, Settings, settings
 from app.core.oauth import oauth
 from app.db.database import get_db
 from app.domains.auth.models import User
+from app.domains.auth.service.google_oauth_allowlist_service import clear_google_oauth_allowlist_cache
 from app.main import app
 
 
@@ -75,6 +77,50 @@ async def test_google_callback_redirects_to_configured_frontend(auth_client, mon
     assert response.status_code == 302
     assert response.headers["location"] == "https://reconhq.tech/auth/callback"
     assert "access_token=test-access-token" in response.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+async def test_google_callback_allows_email_from_allowlist(auth_client, monkeypatch, tmp_path: Path):
+    allowlist = tmp_path / "google_oauth_allowlist.txt"
+    allowlist.write_text("allowed@example.com\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "GOOGLE_OAUTH_ALLOWLIST_PATH", allowlist)
+    monkeypatch.setattr(settings, "FRONTEND_REDIRECT_AFTER_LOGIN", "https://reconhq.tech/auth/callback")
+    clear_google_oauth_allowlist_cache()
+
+    async def fake_authorize_access_token(request):
+        return {"userinfo": {"sub": "google-user-allowed", "email": "Allowed@Example.com"}}
+
+    async def fake_issue_tokens(user, response, db):
+        response.set_cookie("access_token", "test-access-token")
+
+    monkeypatch.setattr(oauth.google, "authorize_access_token", fake_authorize_access_token)
+    monkeypatch.setattr("app.domains.auth.router.auth_router.issue_tokens", fake_issue_tokens)
+
+    response = await auth_client.get("/api/v1/auth/google/callback")
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://reconhq.tech/auth/callback"
+    assert "access_token=test-access-token" in response.headers["set-cookie"]
+    clear_google_oauth_allowlist_cache()
+
+
+@pytest.mark.asyncio
+async def test_google_callback_rejects_email_outside_allowlist(auth_client, monkeypatch, tmp_path: Path):
+    allowlist = tmp_path / "google_oauth_allowlist.txt"
+    allowlist.write_text("allowed@example.com\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "GOOGLE_OAUTH_ALLOWLIST_PATH", allowlist)
+    clear_google_oauth_allowlist_cache()
+
+    async def fake_authorize_access_token(request):
+        return {"userinfo": {"sub": "google-user-blocked", "email": "blocked@example.com"}}
+
+    monkeypatch.setattr(oauth.google, "authorize_access_token", fake_authorize_access_token)
+
+    response = await auth_client.get("/api/v1/auth/google/callback")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "This Google account is not allowed to sign in"}
+    clear_google_oauth_allowlist_cache()
 
 
 def test_settings_build_google_redirect_from_api_base_url():

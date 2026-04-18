@@ -11,12 +11,14 @@ from app.domains.auth.crud import (
     revoke_active_tokens_for_user,
 )
 from app.domains.auth.models import User, ROLE_PARTICIPANT
+from app.domains.auth.service.google_oauth_allowlist_service import ensure_google_oauth_email_allowed
 from app.domains.auth.service.helpers import build_unique_username, get_role_or_500, get_user_role_name
 
 
 async def find_or_create_oauth_user(
     db: AsyncSession, *, provider: str, provider_user_id: str, email: str
 ) -> User:
+    normalized_email = ensure_google_oauth_email_allowed(email)
     participant_role = await get_role_or_500(db, ROLE_PARTICIPANT)
 
     oauth_account = await get_oauth_account(db, provider=provider, provider_user_id=provider_user_id)
@@ -25,19 +27,19 @@ async def find_or_create_oauth_user(
         if user:
             return user
 
-    user = await get_user_by_email(db, email, with_role=True)
+    user = await get_user_by_email(db, normalized_email, with_role=True)
     if user:
         if not user.role_id:
             user.role = participant_role
             await db.flush()
         await create_oauth_account(db, user_id=user.id, provider=provider,
-                                   provider_user_id=provider_user_id, provider_email=email)
+                                   provider_user_id=provider_user_id, provider_email=normalized_email)
         return user
 
-    username = await build_unique_username(db, email.split("@")[0])
-    user = await create_user(db, email=email, username=username, role=participant_role)
+    username = await build_unique_username(db, normalized_email.split("@")[0])
+    user = await create_user(db, email=normalized_email, username=username, role=participant_role)
     await create_oauth_account(db, user_id=user.id, provider=provider,
-                               provider_user_id=provider_user_id, provider_email=email)
+                               provider_user_id=provider_user_id, provider_email=normalized_email)
     created = await get_user_by_id(db, user.id, with_role=True)
     if not created:
         raise HTTPException(status_code=500, detail="Failed to load authenticated user")

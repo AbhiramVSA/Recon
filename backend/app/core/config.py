@@ -1,6 +1,7 @@
 import secrets
 import json
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from pydantic import PostgresDsn, field_validator, model_validator
@@ -108,6 +109,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
+    GOOGLE_OAUTH_ALLOWLIST_PATH: Path = (
+        Path(__file__).resolve().parents[1] / "domains" / "auth" / "data" / "google_oauth_allowlist.txt"
+    )
 
     @field_validator("GOOGLE_REDIRECT_URI", mode="before")
     @classmethod
