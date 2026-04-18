@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.domains.announcements.router import router as announcements_router
 from app.domains.auth.router import router as auth_router
 from app.domains.incidents.router import router as incident_router
 from app.domains.participants.router import router as participants_router
@@ -14,6 +15,7 @@ from app.domains.treasure_hunt.router import router as treasure_hunt_router
 
 router = APIRouter()
 
+router.include_router(announcements_router)
 router.include_router(auth_router)
 router.include_router(incident_router)
 router.include_router(participants_router)

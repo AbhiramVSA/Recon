@@ -1,5 +1,7 @@
 import pytest
 
+from app.domains.auth.models import ROLE_ADMIN
+
 
 async def _create_participant(client, auth_override, user, display_name: str):
     auth_override(user)
@@ -83,3 +85,25 @@ async def test_join_team_rejects_unknown_invite_code(client, auth_override, crea
     auth_override(user)
     response = await client.post("/api/v1/teams/join", json={"invite_code": "NOPE12"})
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_with_participant_profile_can_create_and_view_team(
+    client, auth_override, create_user
+):
+    admin = await create_user(
+        role_name=ROLE_ADMIN,
+        email="team-admin@example.com",
+        username="teamadmin",
+    )
+    await _create_participant(client, auth_override, admin, "team-admin")
+
+    auth_override(admin)
+    create_team = await client.post("/api/v1/teams/", json={"name": "Admin Operators"})
+
+    assert create_team.status_code == 201
+    assert create_team.json()["name"] == "Admin Operators"
+
+    my_team = await client.get("/api/v1/teams/me")
+    assert my_team.status_code == 200
+    assert my_team.json()["name"] == "Admin Operators"
