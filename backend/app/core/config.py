@@ -14,6 +14,25 @@ class ModeEnum(str, Enum):
     testing = "testing"
 
 
+def _normalize_google_oauth_allowlist_path(path_value: Path | str) -> Path:
+    return Path(path_value).expanduser().resolve(strict=False)
+
+
+def _validate_google_oauth_allowlist_file(path_value: Path | str) -> Path:
+    allowlist_path = _normalize_google_oauth_allowlist_path(path_value)
+    if not allowlist_path.is_file():
+        raise ValueError(f"GOOGLE_OAUTH_ALLOWLIST_PATH does not point to a file: {allowlist_path}")
+
+    has_email = any(
+        line.strip() and not line.lstrip().startswith("#")
+        for line in allowlist_path.read_text(encoding="utf-8").splitlines()
+    )
+    if not has_email:
+        raise ValueError(f"GOOGLE_OAUTH_ALLOWLIST_PATH is empty: {allowlist_path}")
+
+    return allowlist_path
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -113,6 +132,11 @@ class Settings(BaseSettings):
         Path(__file__).resolve().parents[1] / "domains" / "auth" / "data" / "google_oauth_allowlist.txt"
     )
 
+    @field_validator("GOOGLE_OAUTH_ALLOWLIST_PATH", mode="before")
+    @classmethod
+    def normalize_google_oauth_allowlist_path(cls, v: Any) -> Path:
+        return _normalize_google_oauth_allowlist_path(v)
+
     @field_validator("GOOGLE_REDIRECT_URI", mode="before")
     @classmethod
     def assemble_redirect_uri(cls, v: str | None, info) -> Any:
@@ -165,6 +189,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
+        self.GOOGLE_OAUTH_ALLOWLIST_PATH = _validate_google_oauth_allowlist_file(
+            self.GOOGLE_OAUTH_ALLOWLIST_PATH
+        )
+
         if self.MODE != ModeEnum.production:
             return self
 

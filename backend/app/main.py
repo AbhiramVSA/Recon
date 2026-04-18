@@ -12,6 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.v1.api import router
+from app.domains.auth.service.google_oauth_allowlist_service import load_google_oauth_allowlist
 from app.utils.rbac import ensure_default_roles_and_admins
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal, engine, get_db
@@ -38,13 +39,17 @@ def _apply_allowed_origin(request: Request, response: JSONResponse) -> JSONRespo
 async def lifespan(app: FastAPI):
     """Startup: warm up DB pool, initialize Redis. Shutdown: clean up."""
     try:
+        oauth_allowlist = load_google_oauth_allowlist()
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
         async with AsyncSessionLocal() as session:
             await ensure_default_roles_and_admins(session)
             await session.commit()
         app.state.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        logfire.info("App started with database and Redis connections.")
+        logfire.info(
+            "App started with database, Redis, and Google OAuth allowlist.",
+            google_oauth_allowlist_size=len(oauth_allowlist),
+        )
     except Exception as e:
         logfire.error("Failed to initialize connections", exc_info=e)
         raise
