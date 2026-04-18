@@ -257,6 +257,18 @@ async def get_scan_request_by_idempotency_key(
     return result.one_or_none()
 
 
+async def get_scan_request_by_idempotency_key_for_update(
+    db: AsyncSession, *, idempotency_key: str
+) -> ZoneScanRequest | None:
+    stmt = (
+        select(ZoneScanRequest)
+        .where(ZoneScanRequest.idempotency_key == idempotency_key)
+        .with_for_update()
+    )
+    result = await db.exec(stmt)
+    return result.one_or_none()
+
+
 async def create_scan_request(
     db: AsyncSession,
     *,
@@ -273,7 +285,6 @@ async def create_scan_request(
     )
     db.add(request)
     await db.flush()
-    await db.refresh(request)
     return request
 
 

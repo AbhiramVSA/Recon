@@ -1,22 +1,28 @@
 import asyncio
 import os
+from pathlib import Path
 import uuid
 
 import jwt
 import pytest
 import pytest_asyncio
+from alembic import command
+from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel, select
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 import app.models  # noqa: F401
-from app.core.config import settings
+from app.core.config import ModeEnum, settings
 from app.core.security import create_access_token
 from app.db.database import get_db
 from app.db.post_commit import pop_post_commit_hooks
 from app.domains.auth.models import ROLE_ADMIN, ROLE_PARTICIPANT, ROLE_PARTNER, Role, User
+from app.domains.points.models import PointLedger
 from app.domains.zones.models import Zone, ZoneCheckIn
+from app.domains.zones.service import zone_service
 from app.main import app
 from app.utils.deps import get_current_user
 
@@ -25,6 +31,8 @@ pytestmark = pytest.mark.skipif(
     not TEST_POSTGRES_DSN,
     reason="Set TEST_POSTGRES_DSN to run Postgres-backed zones concurrency tests.",
 )
+ALEMBIC_INI_PATH = Path(__file__).resolve().parents[4] / "alembic.ini"
+ALEMBIC_SCRIPT_PATH = Path(__file__).resolve().parents[4] / "alembic"
 
 
 def _set_auth_cookie(client: AsyncClient, user: User, role_name: str) -> None:
@@ -38,7 +46,17 @@ async def pg_session_factory():
     async with engine.begin() as conn:
         await conn.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
         await conn.exec_driver_sql("CREATE SCHEMA public")
-        await conn.run_sync(SQLModel.metadata.create_all)
+    previous_database_uri = settings.ASYNC_DATABASE_URI
+    previous_mode = settings.MODE
+    settings.ASYNC_DATABASE_URI = TEST_POSTGRES_DSN
+    settings.MODE = ModeEnum.development
+    alembic_config = Config(str(ALEMBIC_INI_PATH))
+    alembic_config.set_main_option("script_location", str(ALEMBIC_SCRIPT_PATH))
+    try:
+        await asyncio.to_thread(command.upgrade, alembic_config, "head")
+    finally:
+        settings.ASYNC_DATABASE_URI = previous_database_uri
+        settings.MODE = previous_mode
     factory = async_sessionmaker(
         engine,
         class_=AsyncSession,
@@ -200,7 +218,7 @@ async def test_postgres_concurrent_zone_scans_with_different_keys_award_once(
 
 @pytest.mark.asyncio
 async def test_postgres_concurrent_zone_scans_same_idempotency_return_same_response(
-    pg_client, pg_create_user, pg_session_factory
+    pg_client, pg_create_user, pg_session_factory, monkeypatch
 ):
     admin = await pg_create_user(email="pg-zone-admin-idem@example.com", username="pgzoneadminidem", role_name=ROLE_ADMIN)
     player = await pg_create_user(email="pg-zone-player-idem@example.com", username="pgzoneplayeridem")
@@ -245,6 +263,22 @@ async def test_postgres_concurrent_zone_scans_same_idempotency_return_same_respo
         "scannedAt": "2026-04-18T11:24:33Z",
     }
 
+    original_complete_scan_request = zone_service.crud.complete_scan_request
+    delayed_once = False
+
+    async def delayed_complete_scan_request(*args, **kwargs):
+        nonlocal delayed_once
+        if not delayed_once:
+            delayed_once = True
+            await asyncio.sleep(0.2)
+        return await original_complete_scan_request(*args, **kwargs)
+
+    monkeypatch.setattr(
+        zone_service.crud,
+        "complete_scan_request",
+        delayed_complete_scan_request,
+    )
+
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport, base_url="http://testserver", follow_redirects=True
@@ -271,3 +305,65 @@ async def test_postgres_concurrent_zone_scans_same_idempotency_return_same_respo
     assert r1.json()["status"] == "checked_in"
     assert r2.json()["status"] == "checked_in"
     assert r1.json()["checkInId"] == r2.json()["checkInId"]
+
+
+@pytest.mark.asyncio
+async def test_postgres_zone_check_in_partial_unique_index_blocks_duplicate_ledger_rows(
+    pg_client, pg_create_user, pg_session_factory
+):
+    player = await pg_create_user(email="pg-zone-ledger@example.com", username="pgzoneledger")
+
+    _set_auth_cookie(pg_client, player, ROLE_PARTICIPANT)
+    profile = await pg_client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "pg-zone-ledger", "institution": "VIT-AP", "year": 2},
+    )
+    assert profile.status_code == 201
+    participant_id = uuid.UUID(profile.json()["id"])
+
+    async with pg_session_factory() as session:
+        zone = Zone(
+            name="PG Ledger Zone",
+            short_name="pg-ledger",
+            category="challenge",
+            zone_type="booth",
+            status="green",
+            location="Hall PG",
+            points=15,
+            color="#22C55E",
+            tags=["pg"],
+            is_active=True,
+        )
+        session.add(zone)
+        await session.commit()
+
+    register = await pg_client.post("/api/v1/events/pg-ledger/registrations", json={})
+    assert register.status_code == 201
+    registration_id = uuid.UUID(register.json()["registrationId"])
+
+    async with pg_session_factory() as session:
+        first_entry = PointLedger(
+            participant_id=participant_id,
+            amount=15,
+            reason="zone.event_check_in",
+            reference_id=registration_id,
+            idempotency_key=str(uuid.uuid4()),
+            note="first zone check-in",
+            resulting_balance=15,
+        )
+        session.add(first_entry)
+        await session.commit()
+
+        duplicate_entry = PointLedger(
+            participant_id=participant_id,
+            amount=15,
+            reason="zone.event_check_in",
+            reference_id=registration_id,
+            idempotency_key=str(uuid.uuid4()),
+            note="duplicate zone check-in",
+            resulting_balance=30,
+        )
+        session.add(duplicate_entry)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()

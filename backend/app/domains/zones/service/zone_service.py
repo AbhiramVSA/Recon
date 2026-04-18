@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import hashlib
 import secrets
@@ -35,6 +36,8 @@ QR_TOKEN_TTL = datetime.timedelta(hours=12)
 QR_TOKEN_TYPE = "zone_registration_qr"
 ZONE_CHECK_IN_REASON = "zone.event_check_in"
 INVALID_QR_REASON = "expired_or_tampered_or_not_registered"
+SCAN_REQUEST_WAIT_ATTEMPTS = 40
+SCAN_REQUEST_WAIT_DELAY_SECONDS = 0.05
 if hasattr(status, "HTTP_422_UNPROCESSABLE_CONTENT"):
     UNPROCESSABLE_QR_STATUS = status.HTTP_422_UNPROCESSABLE_CONTENT
 else:
@@ -182,6 +185,34 @@ def _ensure_scan_request_payload_match(
 
 def _invalid_qr_response() -> AdminScanCheckInRead:
     return AdminScanCheckInRead(status="invalid_qr", reason=INVALID_QR_REASON)
+
+
+def _scan_request_has_completed_response(request: ZoneScanRequest) -> bool:
+    return "status" in request.response_payload
+
+
+async def _wait_for_completed_scan_request(
+    db: AsyncSession,
+    *,
+    idempotency_key: str,
+    request_fingerprint: str,
+) -> ZoneScanRequest | None:
+    for _ in range(SCAN_REQUEST_WAIT_ATTEMPTS):
+        existing = await crud.get_scan_request_by_idempotency_key(
+            db,
+            idempotency_key=idempotency_key,
+        )
+        if existing is None:
+            await asyncio.sleep(SCAN_REQUEST_WAIT_DELAY_SECONDS)
+            continue
+        _ensure_scan_request_payload_match(
+            existing=existing,
+            request_fingerprint=request_fingerprint,
+        )
+        if _scan_request_has_completed_response(existing):
+            return existing
+        await asyncio.sleep(SCAN_REQUEST_WAIT_DELAY_SECONDS)
+    return None
 
 
 async def _resolve_participant_for_registration(
@@ -463,7 +494,7 @@ async def scan_registration_check_in(
                 scanner_user_id=actor.id,
             )
     except IntegrityError:
-        existing = await crud.get_scan_request_by_idempotency_key(
+        existing = await crud.get_scan_request_by_idempotency_key_for_update(
             db,
             idempotency_key=normalized_key,
         )
@@ -476,7 +507,13 @@ async def scan_registration_check_in(
             existing=existing,
             request_fingerprint=request_fingerprint,
         )
-        if "status" not in existing.response_payload:
+        if not _scan_request_has_completed_response(existing):
+            existing = await _wait_for_completed_scan_request(
+                db,
+                idempotency_key=normalized_key,
+                request_fingerprint=request_fingerprint,
+            )
+        if existing is None or not _scan_request_has_completed_response(existing):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="scan request is still being processed; retry shortly",
