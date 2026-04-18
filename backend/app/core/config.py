@@ -2,6 +2,7 @@ import secrets
 import json
 from enum import Enum
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import PostgresDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,6 +12,40 @@ class ModeEnum(str, Enum):
     development = "development"
     production = "production"
     testing = "testing"
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value not in seen:
+            deduped.append(value)
+            seen.add(value)
+    return deduped
+
+
+def _normalize_origin(value: str) -> str:
+    trimmed = value.strip().rstrip("/")
+    parsed = urlsplit(trimmed)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Invalid origin: {value}")
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def _expand_origin_variants(origin: str) -> list[str]:
+    normalized_origin = _normalize_origin(origin)
+    parsed = urlsplit(normalized_origin)
+    hostname = parsed.hostname or ""
+    port = f":{parsed.port}" if parsed.port else ""
+
+    variants = [normalized_origin]
+    if hostname.startswith("www."):
+        sibling_host = hostname.removeprefix("www.")
+        variants.append(f"{parsed.scheme}://{sibling_host}{port}")
+    elif hostname.count(".") == 1:
+        variants.append(f"{parsed.scheme}://www.{hostname}{port}")
+
+    return _dedupe_preserve_order(variants)
 
 
 class Settings(BaseSettings):
@@ -151,6 +186,11 @@ class Settings(BaseSettings):
             return v.strip().rstrip("/")
         return v
 
+    @field_validator("ALLOWED_ORIGINS")
+    @classmethod
+    def normalize_allowed_origins(cls, values: list[str]) -> list[str]:
+        return _dedupe_preserve_order([_normalize_origin(value) for value in values])
+
     @field_validator("SESSION_SAME_SITE")
     @classmethod
     def validate_same_site(cls, v: str) -> str:
@@ -161,6 +201,18 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
+        merged_allowed_origins: list[str] = []
+        for configured_origin in self.ALLOWED_ORIGINS:
+            merged_allowed_origins.extend(_expand_origin_variants(configured_origin))
+
+        for frontend_url in (self.APP_BASE_URL, self.FRONTEND_REDIRECT_AFTER_LOGIN):
+            if frontend_url:
+                merged_allowed_origins.extend(
+                    _expand_origin_variants(frontend_url)
+                )
+
+        self.ALLOWED_ORIGINS = _dedupe_preserve_order(merged_allowed_origins)
+
         if self.MODE != ModeEnum.production:
             return self
 

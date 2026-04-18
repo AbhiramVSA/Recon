@@ -92,6 +92,38 @@ def test_settings_build_google_redirect_from_api_base_url():
     assert config.GOOGLE_REDIRECT_URI == "https://api.reconhq.tech/api/v1/auth/google/callback"
 
 
+def test_settings_expand_apex_frontend_origin_to_include_www():
+    config = Settings(
+        _env_file=None,
+        MODE=ModeEnum.production,
+        APP_BASE_URL="https://reconhq.tech",
+        API_BASE_URL="https://api.reconhq.tech",
+        FRONTEND_REDIRECT_AFTER_LOGIN="https://reconhq.tech/auth/callback",
+        ALLOWED_ORIGINS="https://reconhq.tech",
+        TRUSTED_HOSTS="api.reconhq.tech,reconhq.tech,www.reconhq.tech",
+        SESSION_HTTPS_ONLY=True,
+    )
+
+    assert "https://reconhq.tech" in config.ALLOWED_ORIGINS
+    assert "https://www.reconhq.tech" in config.ALLOWED_ORIGINS
+
+
+def test_settings_expand_www_frontend_origin_to_include_apex():
+    config = Settings(
+        _env_file=None,
+        MODE=ModeEnum.production,
+        APP_BASE_URL="https://www.reconhq.tech",
+        API_BASE_URL="https://api.reconhq.tech",
+        FRONTEND_REDIRECT_AFTER_LOGIN="https://www.reconhq.tech/auth/callback",
+        ALLOWED_ORIGINS="https://www.reconhq.tech",
+        TRUSTED_HOSTS="api.reconhq.tech,reconhq.tech,www.reconhq.tech",
+        SESSION_HTTPS_ONLY=True,
+    )
+
+    assert "https://www.reconhq.tech" in config.ALLOWED_ORIGINS
+    assert "https://reconhq.tech" in config.ALLOWED_ORIGINS
+
+
 def test_settings_reject_copied_or_localhost_production_urls():
     with pytest.raises(ValidationError):
         Settings(
