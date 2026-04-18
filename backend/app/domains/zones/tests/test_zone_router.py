@@ -69,6 +69,11 @@ async def test_zone_catalog_and_detail(client, auth_override, create_user, sessi
     assert detail.json()["name"] == "Network Warfare"
     assert detail.json()["type"] == "booth"
 
+    detail_by_short_name = await client.get("/api/v1/zones/NW")
+    assert detail_by_short_name.status_code == 200
+    assert detail_by_short_name.json()["id"] == str(zone_a.id)
+    assert detail_by_short_name.json()["shortName"] == "NW"
+
 
 @pytest.mark.asyncio
 async def test_zone_register_unregister_and_me_endpoints(
@@ -107,6 +112,27 @@ async def test_zone_register_unregister_and_me_endpoints(
     regs_after = await client.get("/api/v1/me/registrations")
     assert regs_after.status_code == 200
     assert regs_after.json()["zoneIds"] == []
+
+
+@pytest.mark.asyncio
+async def test_zone_register_unregister_accepts_short_name_identifier(
+    client, auth_override, create_user, session_factory
+):
+    user = await create_user(email="zones-reg-short@example.com", username="zonesregshort")
+    await _create_profile(client, auth_override, user, display_name="zone-reg-short")
+
+    zone = await _create_zone(session_factory, name="Capture The Flag", short_name="ctf")
+
+    auth_override(user)
+    register = await client.post("/api/v1/zones/ctf/register")
+    assert register.status_code == 201
+    assert register.json()["zoneId"] == str(zone.id)
+    assert register.json()["isActive"] is True
+
+    unregister = await client.delete("/api/v1/zones/CTF/register")
+    assert unregister.status_code == 200
+    assert unregister.json()["zoneId"] == str(zone.id)
+    assert unregister.json()["isActive"] is False
 
 
 @pytest.mark.asyncio

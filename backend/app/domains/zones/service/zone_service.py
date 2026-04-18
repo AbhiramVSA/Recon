@@ -254,6 +254,14 @@ async def _get_zone_or_404_by_short_name(db: AsyncSession, *, short_name: str) -
     return zone
 
 
+async def _get_zone_or_404_by_identifier(db: AsyncSession, *, zone_identifier: str) -> Zone:
+    try:
+        zone_id = uuid.UUID(zone_identifier)
+    except (ValueError, TypeError, AttributeError):
+        return await _get_zone_or_404_by_short_name(db, short_name=zone_identifier)
+    return await _get_zone_or_404_by_id(db, zone_id=zone_id)
+
+
 async def _ensure_registration(
     db: AsyncSession,
     *,
@@ -392,29 +400,30 @@ async def list_zones(db: AsyncSession) -> list[ZoneCatalogItemRead]:
     return [_serialize_zone_catalog_item(zone, registered_count) for zone, registered_count in rows]
 
 
-async def get_zone_details(db: AsyncSession, *, zone_id: uuid.UUID) -> ZoneRead:
-    row = await crud.get_zone_with_registration_count(db, zone_id=zone_id)
+async def get_zone_details(db: AsyncSession, *, zone_identifier: str) -> ZoneRead:
+    zone = await _get_zone_or_404_by_identifier(db, zone_identifier=zone_identifier)
+    row = await crud.get_zone_with_registration_count(db, zone_id=zone.id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
-    zone, registered_count = row
-    return _serialize_zone_read(zone, registered_count)
+    resolved_zone, registered_count = row
+    return _serialize_zone_read(resolved_zone, registered_count)
 
 
 async def register_for_zone(
     db: AsyncSession,
     *,
-    zone_id: uuid.UUID,
+    zone_identifier: str,
     user: User,
 ) -> tuple[ZoneRegistrationRead, bool]:
     participant = await get_participant_for_user(db, user=user)
     if participant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant profile not found")
 
-    await _get_zone_or_404_by_id(db, zone_id=zone_id)
+    zone = await _get_zone_or_404_by_identifier(db, zone_identifier=zone_identifier)
     registration, created = await _ensure_registration(
         db,
         participant_id=participant.id,
-        zone_id=zone_id,
+        zone_id=zone.id,
     )
     return _serialize_zone_registration(registration), created
 
@@ -672,22 +681,22 @@ async def scan_registration_check_in(
 async def unregister_from_zone(
     db: AsyncSession,
     *,
-    zone_id: uuid.UUID,
+    zone_identifier: str,
     user: User,
 ) -> ZoneRegistrationRead:
     participant = await get_participant_for_user(db, user=user)
     if participant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant profile not found")
 
-    await _get_zone_or_404_by_id(db, zone_id=zone_id)
+    zone = await _get_zone_or_404_by_identifier(db, zone_identifier=zone_identifier)
     registration = await crud.get_registration_for_update(
         db,
         participant_id=participant.id,
-        zone_id=zone_id,
+        zone_id=zone.id,
     )
     if registration is None:
         return ZoneRegistrationRead(
-            zoneId=zone_id,
+            zoneId=zone.id,
             isActive=False,
             code="",
             checkedInAt=None,

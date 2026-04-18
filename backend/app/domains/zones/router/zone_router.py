@@ -32,11 +32,11 @@ async def list_zones(
 
 @router.get("/zones/{zone_id}", response_model=ZoneRead)
 async def get_zone(
-    zone_id: uuid.UUID,
+    zone_id: str,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await controller.get_one(db, zone_id=zone_id)
+    return await controller.get_one(db, zone_identifier=zone_id)
 
 
 @router.post(
@@ -45,12 +45,12 @@ async def get_zone(
     status_code=status.HTTP_200_OK,
 )
 async def register_for_zone(
-    zone_id: uuid.UUID,
+    zone_id: str,
     response: Response,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    payload, created = await controller.register(db, zone_id=zone_id, user=user)
+    payload, created = await controller.register(db, zone_identifier=zone_id, user=user)
     response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
     return payload
 
@@ -101,11 +101,11 @@ async def scan_zone_check_in(
 
 @router.delete("/zones/{zone_id}/register", response_model=ZoneRegistrationRead)
 async def unregister_from_zone(
-    zone_id: uuid.UUID,
+    zone_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return await controller.unregister(db, zone_id=zone_id, user=user)
+    return await controller.unregister(db, zone_identifier=zone_id, user=user)
 
 
 @router.get("/me/registrations", response_model=MyRegistrationsRead)

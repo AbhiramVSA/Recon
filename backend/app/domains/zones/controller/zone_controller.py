@@ -31,14 +31,14 @@ async def get_catalog(db: AsyncSession) -> list[ZoneCatalogItemRead]:
     return await list_zones(db)
 
 
-async def get_one(db: AsyncSession, *, zone_id: uuid.UUID) -> ZoneRead:
-    return await get_zone_details(db, zone_id=zone_id)
+async def get_one(db: AsyncSession, *, zone_identifier: str) -> ZoneRead:
+    return await get_zone_details(db, zone_identifier=zone_identifier)
 
 
 async def register(
-    db: AsyncSession, *, zone_id: uuid.UUID, user: User
+    db: AsyncSession, *, zone_identifier: str, user: User
 ) -> tuple[ZoneRegistrationRead, bool]:
-    return await register_for_zone(db, zone_id=zone_id, user=user)
+    return await register_for_zone(db, zone_identifier=zone_identifier, user=user)
 
 
 async def register_event(
@@ -76,9 +76,9 @@ async def scan_check_in(
 
 
 async def unregister(
-    db: AsyncSession, *, zone_id: uuid.UUID, user: User
+    db: AsyncSession, *, zone_identifier: str, user: User
 ) -> ZoneRegistrationRead:
-    return await unregister_from_zone(db, zone_id=zone_id, user=user)
+    return await unregister_from_zone(db, zone_identifier=zone_identifier, user=user)
 
 
 async def my_registrations(
