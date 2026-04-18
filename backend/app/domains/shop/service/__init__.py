@@ -6,6 +6,7 @@ from app.domains.shop.service.shop_service import (
     list_my_redemptions,
     list_shop_items,
     redeem_item,
+    return_redemption_admin,
     update_shop_item,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "list_my_redemptions",
     "list_shop_items",
     "redeem_item",
+    "return_redemption_admin",
     "update_shop_item",
 ]

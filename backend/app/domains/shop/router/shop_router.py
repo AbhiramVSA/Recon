@@ -11,6 +11,7 @@ from app.domains.shop.controller import (
     admin_create_item,
     admin_fulfill_redemption,
     admin_list_redemptions,
+    admin_return_redemption,
     admin_update_item,
     get_item,
     list_items,
@@ -21,6 +22,7 @@ from app.domains.shop.schemas import (
     RedemptionFulfill,
     RedemptionRedeem,
     RedemptionRead,
+    RedemptionReturn,
     ShopItemCreate,
     ShopItemRead,
     ShopItemUpdate,
@@ -57,11 +59,12 @@ async def my_redemptions_route(
 @router.get("/redemptions", response_model=list[RedemptionRead])
 async def admin_list_redemptions_route(
     fulfilled: Optional[bool] = None,
+    returned: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(ROLE_ADMIN)),
 ):
     """Admin: list all redemptions, optionally filtered by fulfillment state."""
-    return await admin_list_redemptions(db, fulfilled=fulfilled)
+    return await admin_list_redemptions(db, fulfilled=fulfilled, returned=returned)
 
 
 @router.patch("/redemptions/{redemption_id}/fulfill", response_model=RedemptionRead)
@@ -73,6 +76,17 @@ async def admin_fulfill_redemption_route(
 ):
     """Admin: mark a redemption as fulfilled (merch handed over)."""
     return await admin_fulfill_redemption(db, redemption_id, payload)
+
+
+@router.patch("/redemptions/{redemption_id}/return", response_model=RedemptionRead)
+async def admin_return_redemption_route(
+    redemption_id: uuid.UUID,
+    payload: RedemptionReturn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(ROLE_ADMIN)),
+):
+    """Admin: process an item return, refund points, and release stock."""
+    return await admin_return_redemption(db, redemption_id, user, payload)
 
 
 @router.get("/{item_id}", response_model=ShopItemRead)

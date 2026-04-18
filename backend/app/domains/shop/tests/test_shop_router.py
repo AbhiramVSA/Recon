@@ -23,6 +23,13 @@ def _redeem_payload(key: str) -> dict[str, str]:
     return {"idempotency_key": key}
 
 
+def _return_payload(key: str, notes: str | None = None) -> dict[str, str]:
+    payload = {"idempotency_key": key}
+    if notes is not None:
+        payload["return_notes"] = notes
+    return payload
+
+
 async def _create_participant(client, auth_override, user, display_name: str) -> uuid.UUID:
     auth_override(user)
     response = await client.post(
@@ -261,6 +268,221 @@ async def test_admin_fulfills_redemption(client, auth_override, create_user, ses
 
 
 @pytest.mark.asyncio
+async def test_admin_returns_redemption_refunds_points_and_restores_stock(
+    client, auth_override, create_user, session_factory
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="shopreturnadmin@example.com", username="shopreturnadmin")
+    participant_user = await create_user(email="shopreturner@example.com", username="shopreturner")
+
+    auth_override(participant_user)
+    profile_resp = await client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "shop-returner", "institution": "VIT-AP", "year": 2},
+    )
+    participant_id = uuid.UUID(profile_resp.json()["id"])
+
+    await _seed_points(session_factory, actor=admin, participant_id=participant_id, amount=300)
+
+    auth_override(admin)
+    create_resp = await client.post(
+        "/api/v1/shop/",
+        json={"name": "Returnable Bottle", "description": "Steel bottle", "point_cost": 120, "stock": 3},
+    )
+    item_id = create_resp.json()["id"]
+
+    auth_override(participant_user)
+    redeem_resp = await client.post(
+        f"/api/v1/shop/{item_id}/redeem",
+        json=_redeem_payload("redeem-return-1"),
+    )
+    assert redeem_resp.status_code == 200
+    redemption_id = redeem_resp.json()["id"]
+
+    points_after_redeem = await client.get("/api/v1/points/me")
+    assert points_after_redeem.status_code == 200
+    assert points_after_redeem.json()["balance"] == 180
+
+    auth_override(admin)
+    return_resp = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/return",
+        json=_return_payload("return-idem-1", "Unused, refunding"),
+    )
+    assert return_resp.status_code == 200
+    assert return_resp.json()["returned_at"] is not None
+    assert return_resp.json()["return_notes"] == "Unused, refunding"
+    assert return_resp.json()["point_cost"] == 120
+
+    auth_override(participant_user)
+    points_after_return = await client.get("/api/v1/points/me")
+    assert points_after_return.status_code == 200
+    assert points_after_return.json()["balance"] == 300
+    recent_reasons = [entry["reason"] for entry in points_after_return.json()["recent_transactions"]]
+    assert any(reason.startswith("shop.return.") for reason in recent_reasons)
+
+    item_resp = await client.get(f"/api/v1/shop/{item_id}")
+    assert item_resp.status_code == 200
+    assert item_resp.json()["remaining_stock"] == 3
+
+
+@pytest.mark.asyncio
+async def test_return_idempotency_is_single_refund_and_single_return_state(
+    client, auth_override, create_user, session_factory
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="shopreturnidemadmin@example.com", username="shopreturnidemadmin")
+    participant_user = await create_user(email="shopreturnidem@example.com", username="shopreturnidem")
+
+    auth_override(participant_user)
+    profile_resp = await client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "return-idem", "institution": "VIT-AP", "year": 3},
+    )
+    participant_id = uuid.UUID(profile_resp.json()["id"])
+
+    await _seed_points(session_factory, actor=admin, participant_id=participant_id, amount=250)
+
+    auth_override(admin)
+    create_resp = await client.post(
+        "/api/v1/shop/",
+        json={"name": "Return Patch", "description": "Patch", "point_cost": 100, "stock": 2},
+    )
+    item_id = create_resp.json()["id"]
+
+    auth_override(participant_user)
+    redeem_resp = await client.post(
+        f"/api/v1/shop/{item_id}/redeem",
+        json=_redeem_payload("redeem-return-idem-1"),
+    )
+    redemption_id = redeem_resp.json()["id"]
+
+    auth_override(admin)
+    first = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/return",
+        json=_return_payload("return-idem-stable-1", "First return"),
+    )
+    second = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/return",
+        json=_return_payload("return-idem-stable-1", "First return"),
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
+
+    auth_override(participant_user)
+    points_me = await client.get("/api/v1/points/me")
+    assert points_me.status_code == 200
+    assert points_me.json()["balance"] == 250
+    return_entries = [entry for entry in points_me.json()["recent_transactions"] if entry["reason"].startswith("shop.return.")]
+    assert len(return_entries) == 1
+
+
+@pytest.mark.asyncio
+async def test_returned_redemption_filter_and_snapshot_survive_item_update(
+    client, auth_override, create_user, session_factory
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="shopreturnsnapadmin@example.com", username="shopreturnsnapadmin")
+    participant_user = await create_user(email="shopreturnsnap@example.com", username="shopreturnsnap")
+
+    auth_override(participant_user)
+    profile_resp = await client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "return-snapshot", "institution": "VIT-AP", "year": 1},
+    )
+    participant_id = uuid.UUID(profile_resp.json()["id"])
+
+    await _seed_points(session_factory, actor=admin, participant_id=participant_id, amount=500)
+
+    auth_override(admin)
+    create_resp = await client.post(
+        "/api/v1/shop/",
+        json={"name": "Snapshot Mug", "description": "Mug", "point_cost": 90, "stock": 4},
+    )
+    item_id = create_resp.json()["id"]
+
+    auth_override(participant_user)
+    redeem_resp = await client.post(
+        f"/api/v1/shop/{item_id}/redeem",
+        json=_redeem_payload("redeem-snapshot-1"),
+    )
+    redemption_id = redeem_resp.json()["id"]
+
+    auth_override(admin)
+    return_resp = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/return",
+        json=_return_payload("return-snapshot-1"),
+    )
+    assert return_resp.status_code == 200
+
+    update_resp = await client.patch(
+        f"/api/v1/shop/{item_id}",
+        json={"name": "Renamed Mug", "point_cost": 999},
+    )
+    assert update_resp.status_code == 200
+
+    returned_list = await client.get("/api/v1/shop/redemptions?returned=true")
+    active_list = await client.get("/api/v1/shop/redemptions?returned=false")
+
+    assert returned_list.status_code == 200
+    assert len(returned_list.json()) == 1
+    assert returned_list.json()[0]["item_name"] == "Snapshot Mug"
+    assert returned_list.json()[0]["point_cost"] == 90
+    assert active_list.status_code == 200
+    assert active_list.json() == []
+
+
+@pytest.mark.asyncio
+async def test_returned_redemption_cannot_be_fulfilled_and_new_return_key_conflicts(
+    client, auth_override, create_user, session_factory
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="shopreturnconflictadmin@example.com", username="shopreturnconflictadmin")
+    participant_user = await create_user(email="shopreturnconflict@example.com", username="shopreturnconflict")
+
+    auth_override(participant_user)
+    profile_resp = await client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "return-conflict", "institution": "VIT-AP", "year": 4},
+    )
+    participant_id = uuid.UUID(profile_resp.json()["id"])
+
+    await _seed_points(session_factory, actor=admin, participant_id=participant_id, amount=180)
+
+    auth_override(admin)
+    create_resp = await client.post(
+        "/api/v1/shop/",
+        json={"name": "Conflict Cap", "description": "Cap", "point_cost": 80, "stock": 1},
+    )
+    item_id = create_resp.json()["id"]
+
+    auth_override(participant_user)
+    redeem_resp = await client.post(
+        f"/api/v1/shop/{item_id}/redeem",
+        json=_redeem_payload("redeem-return-conflict-1"),
+    )
+    redemption_id = redeem_resp.json()["id"]
+
+    auth_override(admin)
+    returned = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/return",
+        json=_return_payload("return-conflict-1"),
+    )
+    assert returned.status_code == 200
+
+    fulfill_resp = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/fulfill",
+        json={"fulfillment_notes": "too late"},
+    )
+    assert fulfill_resp.status_code == 409
+    assert fulfill_resp.json()["detail"] == "Returned redemptions cannot be fulfilled"
+
+    second_return = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/return",
+        json=_return_payload("return-conflict-2"),
+    )
+    assert second_return.status_code == 409
+    assert second_return.json()["detail"] == "Redemption is already returned"
+
+
+@pytest.mark.asyncio
 async def test_admin_lists_redemptions_with_filter(client, auth_override, create_user, session_factory):
     """Admin can list all redemptions and filter by fulfilled state."""
     admin = await create_user(role_name=ROLE_ADMIN, email="shopadmin8@example.com", username="shopadmin8")
@@ -388,6 +610,19 @@ async def test_redeem_rejects_blank_idempotency_key(
         json=_redeem_payload("   "),
     )
     assert redeem.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_shop_item_rejects_blank_name_and_blank_description(client, auth_override, create_user):
+    admin = await create_user(role_name=ROLE_ADMIN, email="shopinvalidadmin@example.com", username="shopinvalidadmin")
+    auth_override(admin)
+
+    response = await client.post(
+        "/api/v1/shop/",
+        json={"name": "   ", "description": "   ", "point_cost": 10, "stock": 1},
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

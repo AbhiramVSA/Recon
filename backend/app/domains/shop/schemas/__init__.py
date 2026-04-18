@@ -7,6 +7,7 @@ from app.domains.shop.schemas.redemption import (
     RedemptionFulfill,
     RedemptionRedeem,
     RedemptionRead,
+    RedemptionReturn,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "RedemptionFulfill",
     "RedemptionRedeem",
     "RedemptionRead",
+    "RedemptionReturn",
 ]

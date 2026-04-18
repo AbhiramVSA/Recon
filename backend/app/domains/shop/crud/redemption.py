@@ -9,12 +9,20 @@ from app.domains.shop.models import Redemption
 
 
 async def create_redemption(
-    db: AsyncSession, *, participant_id: uuid.UUID, item_id: uuid.UUID, idempotency_key: str
+    db: AsyncSession,
+    *,
+    participant_id: uuid.UUID,
+    item_id: uuid.UUID,
+    idempotency_key: str,
+    item_name_snapshot: str,
+    point_cost_snapshot: int,
 ) -> Redemption:
     redemption = Redemption(
         participant_id=participant_id,
         item_id=item_id,
         idempotency_key=idempotency_key,
+        item_name_snapshot=item_name_snapshot,
+        point_cost_snapshot=point_cost_snapshot,
     )
     db.add(redemption)
     await db.flush()
@@ -26,10 +34,29 @@ async def get_redemption_by_id(db: AsyncSession, redemption_id: uuid.UUID) -> Re
     return await db.get(Redemption, redemption_id)
 
 
+async def get_redemption_for_update(
+    db: AsyncSession, redemption_id: uuid.UUID
+) -> Redemption | None:
+    query = select(Redemption).where(Redemption.id == redemption_id)
+    bind = db.get_bind()
+    if bind.dialect.name != "sqlite":
+        query = query.with_for_update()
+    result = await db.exec(query)
+    return result.one_or_none()
+
+
 async def get_redemption_by_idempotency_key(
     db: AsyncSession, *, idempotency_key: str
 ) -> Redemption | None:
     query = select(Redemption).where(Redemption.idempotency_key == idempotency_key)
+    result = await db.exec(query)
+    return result.one_or_none()
+
+
+async def get_redemption_by_return_idempotency_key(
+    db: AsyncSession, *, idempotency_key: str
+) -> Redemption | None:
+    query = select(Redemption).where(Redemption.return_idempotency_key == idempotency_key)
     result = await db.exec(query)
     return result.one_or_none()
 
@@ -47,13 +74,17 @@ async def list_redemptions_by_participant(
 
 
 async def list_all_redemptions(
-    db: AsyncSession, *, fulfilled: Optional[bool] = None
+    db: AsyncSession, *, fulfilled: Optional[bool] = None, returned: Optional[bool] = None
 ) -> list[Redemption]:
     query = select(Redemption).order_by(Redemption.redeemed_at.desc())
     if fulfilled is True:
         query = query.where(Redemption.fulfilled_at.is_not(None))
     elif fulfilled is False:
         query = query.where(Redemption.fulfilled_at.is_(None))
+    if returned is True:
+        query = query.where(Redemption.returned_at.is_not(None))
+    elif returned is False:
+        query = query.where(Redemption.returned_at.is_(None))
     result = await db.exec(query)
     return list(result.all())
 
@@ -64,6 +95,23 @@ async def fulfill_redemption(
     redemption.fulfilled_at = datetime.now(timezone.utc)
     if notes is not None:
         redemption.fulfillment_notes = notes
+    await db.flush()
+    await db.refresh(redemption)
+    return redemption
+
+
+async def return_redemption(
+    db: AsyncSession,
+    redemption: Redemption,
+    *,
+    returned_by_user_id: uuid.UUID,
+    idempotency_key: str,
+    notes: Optional[str] = None,
+) -> Redemption:
+    redemption.returned_at = datetime.now(timezone.utc)
+    redemption.returned_by_user_id = returned_by_user_id
+    redemption.return_idempotency_key = idempotency_key
+    redemption.return_notes = notes
     await db.flush()
     await db.refresh(redemption)
     return redemption

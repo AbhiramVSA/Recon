@@ -8,6 +8,7 @@ from app.domains.shop.schemas import (
     RedemptionFulfill,
     RedemptionRedeem,
     RedemptionRead,
+    RedemptionReturn,
     ShopItemCreate,
     ShopItemRead,
     ShopItemUpdate,
@@ -20,6 +21,7 @@ from app.domains.shop.service import (
     list_my_redemptions,
     list_shop_items,
     redeem_item,
+    return_redemption_admin,
     update_shop_item,
 )
 
@@ -74,12 +76,23 @@ async def admin_update_item(
 
 
 async def admin_list_redemptions(
-    db: AsyncSession, *, fulfilled: Optional[bool] = None
+    db: AsyncSession, *, fulfilled: Optional[bool] = None, returned: Optional[bool] = None
 ) -> list[RedemptionRead]:
-    return await list_all_redemptions_admin(db, fulfilled=fulfilled)
+    return await list_all_redemptions_admin(db, fulfilled=fulfilled, returned=returned)
 
 
 async def admin_fulfill_redemption(
     db: AsyncSession, redemption_id: uuid.UUID, payload: RedemptionFulfill
 ) -> RedemptionRead:
     return await fulfill_redemption_admin(db, redemption_id, payload)
+
+
+async def admin_return_redemption(
+    db: AsyncSession, redemption_id: uuid.UUID, actor: User, payload: RedemptionReturn
+) -> RedemptionRead:
+    return await return_redemption_admin(
+        db,
+        redemption_id=redemption_id,
+        actor=actor,
+        payload=payload,
+    )

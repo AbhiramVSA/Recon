@@ -61,7 +61,10 @@ async def update_item(db: AsyncSession, item: ShopItem, payload: ShopItemUpdate)
 
 
 async def count_redemptions_for_item(db: AsyncSession, item_id: uuid.UUID) -> int:
-    query = sa_select(func.count()).where(Redemption.item_id == item_id)
+    query = sa_select(func.count()).where(
+        Redemption.item_id == item_id,
+        Redemption.returned_at.is_(None),
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         result = await db.execute(query)

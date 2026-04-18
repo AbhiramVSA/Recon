@@ -18,11 +18,13 @@ from app.domains.shop.crud import (
     fulfill_redemption as crud_fulfill_redemption,
     get_item_by_id,
     get_item_for_update,
-    get_redemption_by_id,
     get_redemption_by_idempotency_key,
+    get_redemption_by_return_idempotency_key,
+    get_redemption_for_update,
     list_active_items,
     list_all_redemptions as crud_list_all_redemptions,
     list_redemptions_by_participant,
+    return_redemption as crud_return_redemption,
     update_item,
 )
 from app.domains.shop.models import Redemption, ShopItem
@@ -30,6 +32,7 @@ from app.domains.shop.schemas import (
     RedemptionFulfill,
     RedemptionRedeem,
     RedemptionRead,
+    RedemptionReturn,
     ShopItemCreate,
     ShopItemRead,
     ShopItemUpdate,
@@ -115,7 +118,7 @@ async def redeem_item(
                 status_code=409,
                 detail="idempotency_key already exists for a different redemption request",
             )
-        return await _enrich_redemption(db, existing)
+        return _redemption_to_read(existing)
 
     # 1. Lock the item row
     item = await get_item_for_update(db, item_id)
@@ -162,6 +165,8 @@ async def redeem_item(
                 participant_id=participant_id,
                 item_id=item.id,
                 idempotency_key=payload.idempotency_key,
+                item_name_snapshot=item.name,
+                point_cost_snapshot=item.point_cost,
             )
     except IntegrityError:
         existing = await get_redemption_by_idempotency_key(
@@ -174,9 +179,9 @@ async def redeem_item(
                 status_code=409,
                 detail="idempotency_key already exists for a different redemption request",
             )
-        return await _enrich_redemption(db, existing)
+        return _redemption_to_read(existing)
 
-    return _redemption_to_read(redemption, item)
+    return _redemption_to_read(redemption)
 
 
 # ---------------------------------------------------------------------------
@@ -187,26 +192,100 @@ async def list_my_redemptions(
     db: AsyncSession, participant_id: uuid.UUID
 ) -> list[RedemptionRead]:
     redemptions = await list_redemptions_by_participant(db, participant_id)
-    return [await _enrich_redemption(db, r) for r in redemptions]
+    return [_redemption_to_read(r) for r in redemptions]
 
 
 async def list_all_redemptions_admin(
-    db: AsyncSession, *, fulfilled: Optional[bool] = None
+    db: AsyncSession, *, fulfilled: Optional[bool] = None, returned: Optional[bool] = None
 ) -> list[RedemptionRead]:
-    redemptions = await crud_list_all_redemptions(db, fulfilled=fulfilled)
-    return [await _enrich_redemption(db, r) for r in redemptions]
+    redemptions = await crud_list_all_redemptions(db, fulfilled=fulfilled, returned=returned)
+    return [_redemption_to_read(r) for r in redemptions]
 
 
 async def fulfill_redemption_admin(
     db: AsyncSession, redemption_id: uuid.UUID, payload: RedemptionFulfill
 ) -> RedemptionRead:
-    redemption = await get_redemption_by_id(db, redemption_id)
+    redemption = await get_redemption_for_update(db, redemption_id)
     if not redemption:
         raise HTTPException(status_code=404, detail="Redemption not found")
     if redemption.fulfilled_at is not None:
         raise HTTPException(status_code=409, detail="Redemption is already fulfilled")
+    if redemption.returned_at is not None:
+        raise HTTPException(status_code=409, detail="Returned redemptions cannot be fulfilled")
     redemption = await crud_fulfill_redemption(db, redemption, notes=payload.fulfillment_notes)
-    return await _enrich_redemption(db, redemption)
+    return _redemption_to_read(redemption)
+
+
+async def return_redemption_admin(
+    db: AsyncSession,
+    *,
+    redemption_id: uuid.UUID,
+    actor: User,
+    payload: RedemptionReturn,
+) -> RedemptionRead:
+    existing = await get_redemption_by_return_idempotency_key(
+        db, idempotency_key=payload.idempotency_key
+    )
+    if existing is not None:
+        if existing.id != redemption_id:
+            raise HTTPException(
+                status_code=409,
+                detail="idempotency_key already exists for a different return request",
+            )
+        return _redemption_to_read(existing)
+
+    redemption = await get_redemption_for_update(db, redemption_id)
+    if not redemption:
+        raise HTTPException(status_code=404, detail="Redemption not found")
+    if redemption.returned_at is not None:
+        if redemption.return_idempotency_key == payload.idempotency_key:
+            return _redemption_to_read(redemption)
+        raise HTTPException(status_code=409, detail="Redemption is already returned")
+
+    item = await get_item_for_update(db, redemption.item_id)
+    if item is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Shop item referenced by redemption no longer exists",
+        )
+
+    try:
+        async with db.begin_nested():
+            redemption = await crud_return_redemption(
+                db,
+                redemption,
+                returned_by_user_id=actor.id,
+                idempotency_key=payload.idempotency_key,
+                notes=payload.return_notes,
+            )
+    except IntegrityError:
+        existing = await get_redemption_by_return_idempotency_key(
+            db, idempotency_key=payload.idempotency_key
+        )
+        if existing is None:
+            raise
+        if existing.id != redemption_id:
+            raise HTTPException(
+                status_code=409,
+                detail="idempotency_key already exists for a different return request",
+            )
+        return _redemption_to_read(existing)
+
+    await _award_points(
+        db,
+        participant_id=redemption.participant_id,
+        amount=redemption.point_cost_snapshot,
+        reason=_build_shop_return_reason(redemption.item_name_snapshot),
+        reference_id=redemption.id,
+        actor=actor,
+        idempotency_key=_build_return_points_idempotency_key(
+            redemption_id=redemption.id,
+            request_idempotency_key=payload.idempotency_key,
+        ),
+        note=f"shop return for {redemption.item_name_snapshot}",
+    )
+
+    return _redemption_to_read(redemption)
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +295,30 @@ async def fulfill_redemption_admin(
 async def _get_participant_balance(db: AsyncSession, participant_id: uuid.UUID) -> int:
     """Read participant balance from points projection."""
     return await points_crud.get_balance_for_participant(db, participant_id=participant_id)
+
+
+async def _award_points(
+    db: AsyncSession,
+    *,
+    participant_id: uuid.UUID,
+    amount: int,
+    reason: str,
+    reference_id: uuid.UUID | None,
+    actor: User,
+    idempotency_key: str,
+    note: str | None = None,
+) -> PointLedgerEntry:
+    """Award or spend points through the points domain service to preserve invariants."""
+    payload = PointAwardCreate(
+        participant_id=participant_id,
+        amount=amount,
+        reason=reason,
+        reference_id=reference_id,
+        idempotency_key=idempotency_key,
+        note=note,
+    )
+    entry, _ = await award_points(db, payload=payload, actor=actor)
+    return entry
 
 
 async def _spend_points(
@@ -229,28 +332,24 @@ async def _spend_points(
     idempotency_key: str,
     note: str | None = None,
 ) -> PointLedgerEntry:
-    """Spend points through the points domain service to preserve invariants."""
-    payload = PointAwardCreate(
+    return await _award_points(
+        db,
         participant_id=participant_id,
         amount=-amount,
         reason=reason,
         reference_id=reference_id,
+        actor=actor,
         idempotency_key=idempotency_key,
         note=note,
     )
-    entry, _ = await award_points(db, payload=payload, actor=actor)
-    return entry
 
 
 def _build_shop_redeem_reason(item_name: str) -> str:
-    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in item_name).strip("_")
-    if not normalized:
-        normalized = "item"
-    while "__" in normalized:
-        normalized = normalized.replace("__", "_")
-    if not normalized[0].isalpha():
-        normalized = f"item_{normalized}"
-    return f"shop.redeem.{normalized}"
+    return f"shop.redeem.{_normalize_reason_slug(item_name)}"
+
+
+def _build_shop_return_reason(item_name: str) -> str:
+    return f"shop.return.{_normalize_reason_slug(item_name)}"
 
 
 def _build_redeem_points_idempotency_key(
@@ -259,6 +358,25 @@ def _build_redeem_points_idempotency_key(
     raw = f"{participant_id}:{item_id}:{request_idempotency_key}".encode("utf-8")
     digest = hashlib.sha256(raw).hexdigest()
     return f"shop.redeem.{digest[:87]}"
+
+
+def _build_return_points_idempotency_key(
+    *, redemption_id: uuid.UUID, request_idempotency_key: str
+) -> str:
+    raw = f"{redemption_id}:{request_idempotency_key}".encode("utf-8")
+    digest = hashlib.sha256(raw).hexdigest()
+    return f"shop.return.{digest[:87]}"
+
+
+def _normalize_reason_slug(item_name: str) -> str:
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in item_name).strip("_")
+    if not normalized:
+        normalized = "item"
+    while "__" in normalized:
+        normalized = normalized.replace("__", "_")
+    if not normalized[0].isalpha():
+        normalized = f"item_{normalized}"
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -280,33 +398,17 @@ def _item_to_read(item: ShopItem, remaining_stock: Optional[int]) -> ShopItemRea
     )
 
 
-def _redemption_to_read(redemption: Redemption, item: ShopItem) -> RedemptionRead:
+def _redemption_to_read(redemption: Redemption) -> RedemptionRead:
     return RedemptionRead(
         id=redemption.id,
         participant_id=redemption.participant_id,
         item_id=redemption.item_id,
-        item_name=item.name,
-        point_cost=item.point_cost,
+        item_name=redemption.item_name_snapshot,
+        point_cost=redemption.point_cost_snapshot,
         redeemed_at=redemption.redeemed_at,
         fulfilled_at=redemption.fulfilled_at,
         fulfillment_notes=redemption.fulfillment_notes,
-        created_at=redemption.created_at,
-    )
-
-
-async def _enrich_redemption(db: AsyncSession, redemption: Redemption) -> RedemptionRead:
-    """Load the item to denormalize name/cost into the read schema."""
-    item = await get_item_by_id(db, redemption.item_id)
-    name = item.name if item else "[deleted]"
-    cost = item.point_cost if item else 0
-    return RedemptionRead(
-        id=redemption.id,
-        participant_id=redemption.participant_id,
-        item_id=redemption.item_id,
-        item_name=name,
-        point_cost=cost,
-        redeemed_at=redemption.redeemed_at,
-        fulfilled_at=redemption.fulfilled_at,
-        fulfillment_notes=redemption.fulfillment_notes,
+        returned_at=redemption.returned_at,
+        return_notes=redemption.return_notes,
         created_at=redemption.created_at,
     )
