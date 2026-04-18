@@ -4,15 +4,15 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domains.auth.crud import create_user, delete_user, get_user_by_id, list_users
-from app.domains.auth.models import User, ROLE_ADMIN, ROLE_PARTICIPANT
+from app.domains.auth.models import User, ROLE_ADMIN
 from app.domains.auth.schemas import UserUpdate
-from app.domains.auth.service.helpers import get_role_or_500, hash_password
+from app.domains.auth.service.helpers import get_default_role_for_email, hash_password
 
 
 async def register_user(email: str, username: str, password: str, db: AsyncSession) -> User:
-    participant_role = await get_role_or_500(db, ROLE_PARTICIPANT)
+    default_role = await get_default_role_for_email(db, email)
     user = await create_user(db, email=email, username=username,
-                             hashed_password=hash_password(password), role=participant_role)
+                             hashed_password=hash_password(password), role=default_role)
     registered = await get_user_by_id(db, user.id, with_role=True)
     if not registered:
         raise HTTPException(status_code=500, detail="Failed to load created user")

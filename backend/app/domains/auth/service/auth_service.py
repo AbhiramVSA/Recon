@@ -10,34 +10,42 @@ from app.domains.auth.crud import (
     get_refresh_token_by_hash, get_user_by_email, get_user_by_id,
     revoke_active_tokens_for_user,
 )
-from app.domains.auth.models import User, ROLE_PARTICIPANT
+from app.domains.auth.models import User
 from app.domains.auth.service.google_oauth_allowlist_service import ensure_google_oauth_email_allowed
-from app.domains.auth.service.helpers import build_unique_username, get_role_or_500, get_user_role_name
+from app.domains.auth.service.helpers import (
+    build_unique_username,
+    ensure_bootstrap_admin_role,
+    get_default_role_for_email,
+    get_user_role_name,
+)
 
 
 async def find_or_create_oauth_user(
     db: AsyncSession, *, provider: str, provider_user_id: str, email: str
 ) -> User:
     normalized_email = ensure_google_oauth_email_allowed(email)
-    participant_role = await get_role_or_500(db, ROLE_PARTICIPANT)
+    default_role = await get_default_role_for_email(db, normalized_email)
 
     oauth_account = await get_oauth_account(db, provider=provider, provider_user_id=provider_user_id)
     if oauth_account:
         user = await get_user_by_id(db, oauth_account.user_id, with_role=True)
         if user:
+            await ensure_bootstrap_admin_role(db, user)
             return user
 
     user = await get_user_by_email(db, normalized_email, with_role=True)
     if user:
         if not user.role_id:
-            user.role = participant_role
+            user.role = default_role
             await db.flush()
+        else:
+            await ensure_bootstrap_admin_role(db, user)
         await create_oauth_account(db, user_id=user.id, provider=provider,
                                    provider_user_id=provider_user_id, provider_email=normalized_email)
         return user
 
     username = await build_unique_username(db, normalized_email.split("@")[0])
-    user = await create_user(db, email=normalized_email, username=username, role=participant_role)
+    user = await create_user(db, email=normalized_email, username=username, role=default_role)
     await create_oauth_account(db, user_id=user.id, provider=provider,
                                provider_user_id=provider_user_id, provider_email=normalized_email)
     created = await get_user_by_id(db, user.id, with_role=True)

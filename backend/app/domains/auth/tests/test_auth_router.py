@@ -9,6 +9,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import ModeEnum, Settings, settings
+from app.domains.auth.models import ROLE_ADMIN, ROLE_PARTICIPANT
+from app.domains.auth.service.auth_service import find_or_create_oauth_user
+from app.domains.auth.service.user_service import register_user
 from app.core.oauth import oauth
 from app.db.database import get_db
 from app.domains.auth.models import User
@@ -121,6 +124,47 @@ async def test_google_callback_rejects_email_outside_allowlist(auth_client, monk
     assert response.status_code == 403
     assert response.json() == {"detail": "Nice try, but this Google account isn't on the guest list."}
     clear_google_oauth_allowlist_cache()
+
+
+@pytest.mark.asyncio
+async def test_register_user_assigns_admin_role_for_bootstrap_email(session_factory, seeded_roles, monkeypatch):
+    monkeypatch.setattr(settings, "BOOTSTRAP_ADMIN_EMAILS", ["bootstrap-admin@example.com"])
+
+    async with session_factory() as session:
+        user = await register_user(
+            email="bootstrap-admin@example.com",
+            username="bootstrapadmin",
+            password="secret",
+            db=session,
+        )
+
+        assert user.role is not None
+        assert user.role.name == ROLE_ADMIN
+
+
+@pytest.mark.asyncio
+async def test_oauth_existing_bootstrap_admin_email_is_promoted(session_factory, seeded_roles, create_user, monkeypatch):
+    monkeypatch.setattr(settings, "BOOTSTRAP_ADMIN_EMAILS", ["bootstrap-oauth@example.com"])
+    monkeypatch.setattr(
+        "app.domains.auth.service.auth_service.ensure_google_oauth_email_allowed",
+        lambda email: email.strip().lower(),
+    )
+    await create_user(
+        role_name=ROLE_PARTICIPANT,
+        email="bootstrap-oauth@example.com",
+        username="bootstrapparticipant",
+    )
+
+    async with session_factory() as session:
+        user = await find_or_create_oauth_user(
+            session,
+            provider="google",
+            provider_user_id="bootstrap-google-user",
+            email="bootstrap-oauth@example.com",
+        )
+
+        assert user.role is not None
+        assert user.role.name == ROLE_ADMIN
 
 
 def test_settings_build_google_redirect_from_api_base_url():
