@@ -1,4 +1,8 @@
 from app.domains.zones.schemas.zone import (
+    AdminScanCheckInCreate,
+    AdminScanCheckInRead,
+    EventRegistrationCreate,
+    EventRegistrationQrRead,
     MyPassesRead,
     MyRegistrationsRead,
     ZoneCatalogItemRead,
@@ -8,6 +12,10 @@ from app.domains.zones.schemas.zone import (
 )
 
 __all__ = [
+    "AdminScanCheckInCreate",
+    "AdminScanCheckInRead",
+    "EventRegistrationCreate",
+    "EventRegistrationQrRead",
     "MyPassesRead",
     "MyRegistrationsRead",
     "ZoneCatalogItemRead",

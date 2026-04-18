@@ -16,8 +16,12 @@ from app.domains.participants.models import Participant, ParticipantBase  # noqa
 from app.domains.zones.models import (  # noqa: F401
     Zone,
     ZoneBase,
+    ZoneCheckIn,
+    ZoneCheckInBase,
     ZoneRegistration,
     ZoneRegistrationBase,
+    ZoneScanRequest,
+    ZoneScanRequestBase,
     ZoneStatus,
 )
 from app.domains.points.models import (  # noqa: F401

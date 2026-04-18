@@ -1,5 +1,7 @@
-import pytest
 import uuid
+from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from app.domains.auth.models import ROLE_ADMIN
 from app.domains.zones.models import Zone, ZoneRegistration
@@ -195,6 +197,8 @@ async def test_participant_dashboard_aggregates_points_and_zone_checkins(
             participant_id=participant_id,
             zone_id=zone.id,
             pass_code="dash-pass-code",
+            qr_jti=uuid.uuid4().hex,
+            qr_expires_at=datetime.now(timezone.utc) + timedelta(hours=12),
             is_active=True,
             checked_in_at=zone.created_at,
         )

@@ -11,6 +11,8 @@ class ZoneRegistrationBase(SQLModel):
     participant_id: uuid.UUID = Field(foreign_key="participants.id", index=True)
     zone_id: uuid.UUID = Field(foreign_key="zones.id", index=True)
     pass_code: str = Field(max_length=64, unique=True, index=True)
+    qr_jti: str = Field(max_length=64, unique=True, index=True)
+    qr_expires_at: datetime = Field(sa_type=DateTime(timezone=True))
     is_active: bool = Field(default=True, index=True)
     checked_in_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     checked_in_by: uuid.UUID | None = Field(default=None, foreign_key="users.id", index=True)
