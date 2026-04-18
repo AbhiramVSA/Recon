@@ -55,3 +55,49 @@ async def test_update_incident_rejects_unknown_assignee_with_404(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Assigned user not found"}
+
+
+@pytest.mark.asyncio
+async def test_update_incident_assigns_existing_user(
+    client, auth_override, create_user, session_factory
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="incident-admin-3@example.com", username="incidentadmin3")
+    assignee = await create_user(email="incident-assignee@example.com", username="incidentassignee")
+    auth_override(admin)
+    incident = await _create_incident(session_factory, title="Known assignee")
+
+    response = await client.patch(
+        f"/api/v1/incidents/{incident.id}",
+        json={"assigned_to": str(assignee.id), "status": "acknowledged"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "acknowledged"
+    assert data["assigned_to"] == str(assignee.id)
+
+
+@pytest.mark.asyncio
+async def test_reopening_resolved_incident_clears_resolved_at(
+    client, auth_override, create_user, session_factory
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="incident-admin-4@example.com", username="incidentadmin4")
+    auth_override(admin)
+    incident = await _create_incident(session_factory, title="Reopen incident")
+
+    resolve_response = await client.patch(
+        f"/api/v1/incidents/{incident.id}",
+        json={"status": "resolved", "resolution_notes": "Handled by ops"},
+    )
+    assert resolve_response.status_code == 200
+    assert resolve_response.json()["resolved_at"] is not None
+
+    reopen_response = await client.patch(
+        f"/api/v1/incidents/{incident.id}",
+        json={"status": "acknowledged"},
+    )
+
+    assert reopen_response.status_code == 200
+    data = reopen_response.json()
+    assert data["status"] == "acknowledged"
+    assert data["resolved_at"] is None
