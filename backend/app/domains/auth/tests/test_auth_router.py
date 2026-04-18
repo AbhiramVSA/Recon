@@ -119,7 +119,7 @@ async def test_google_callback_rejects_email_outside_allowlist(auth_client, monk
     response = await auth_client.get("/api/v1/auth/google/callback")
 
     assert response.status_code == 403
-    assert response.json() == {"detail": "This Google account is not allowed to sign in"}
+    assert response.json() == {"detail": "Nice try, but this Google account isn't on the guest list."}
     clear_google_oauth_allowlist_cache()
 
 

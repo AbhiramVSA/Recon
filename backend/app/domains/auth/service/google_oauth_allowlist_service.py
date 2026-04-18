@@ -72,5 +72,8 @@ def clear_google_oauth_allowlist_cache() -> None:
 def ensure_google_oauth_email_allowed(email: str) -> str:
     normalized = normalize_google_oauth_email(email)
     if normalized not in load_google_oauth_allowlist():
-        raise HTTPException(status_code=403, detail="This Google account is not allowed to sign in")
+        raise HTTPException(
+            status_code=403,
+            detail="Nice try, but this Google account isn't on the guest list.",
+        )
     return normalized
