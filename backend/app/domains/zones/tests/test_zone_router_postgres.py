@@ -21,7 +21,7 @@ from app.db.database import get_db
 from app.db.post_commit import pop_post_commit_hooks
 from app.domains.auth.models import ROLE_ADMIN, ROLE_PARTICIPANT, ROLE_PARTNER, Role, User
 from app.domains.points.models import PointLedger
-from app.domains.zones.models import Zone, ZoneCheckIn
+from app.domains.zones.models import Zone, ZoneCheckIn, ZoneRegistration
 from app.domains.zones.service import zone_service
 from app.main import app
 from app.utils.deps import get_current_user
@@ -139,6 +139,80 @@ def pg_auth_override():
 
 
 @pytest.mark.asyncio
+async def test_postgres_concurrent_zone_registration_awards_once(
+    pg_client, pg_create_user, pg_session_factory
+):
+    player = await pg_create_user(email="pg-zone-register@example.com", username="pgzoneregister")
+
+    _set_auth_cookie(pg_client, player, ROLE_PARTICIPANT)
+    profile = await pg_client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "pg-zone-register", "institution": "VIT-AP", "year": 2},
+    )
+    assert profile.status_code == 201
+    participant_id = uuid.UUID(profile.json()["id"])
+
+    async with pg_session_factory() as session:
+        zone = Zone(
+            name="PG Registration Zone",
+            short_name="pg-register",
+            category="challenge",
+            zone_type="booth",
+            status="green",
+            location="Hall PG",
+            points=100,
+            registration_required=True,
+            registration_points=100,
+            check_in_points=0,
+            color="#22C55E",
+            tags=["pg"],
+            is_active=True,
+        )
+        session.add(zone)
+        await session.commit()
+        await session.refresh(zone)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=True
+    ) as client_a, AsyncClient(
+        transport=transport, base_url="http://testserver", follow_redirects=True
+    ) as client_b:
+        _set_auth_cookie(client_a, player, ROLE_PARTICIPANT)
+        _set_auth_cookie(client_b, player, ROLE_PARTICIPANT)
+        r1, r2 = await asyncio.gather(
+            client_a.post(f"/api/v1/zones/{zone.id}/register"),
+            client_b.post(f"/api/v1/zones/{zone.id}/register"),
+        )
+
+    statuses = sorted([r1.status_code, r2.status_code])
+    assert statuses == [200, 201]
+    bodies = [r1.json(), r2.json()]
+    assert sorted(body["pointsAwarded"] for body in bodies) == [0, 100]
+    assert sorted(body["newPointsBalance"] for body in bodies) == [100, 100]
+
+    _set_auth_cookie(pg_client, player, ROLE_PARTICIPANT)
+    me = await pg_client.get("/api/v1/points/me")
+    assert me.status_code == 200
+    assert me.json()["participant_id"] == str(participant_id)
+    assert me.json()["balance"] == 100
+
+    async with pg_session_factory() as session:
+        registration = (
+            await session.exec(select(ZoneRegistration).where(ZoneRegistration.zone_id == zone.id))
+        ).one()
+        ledger_entries = await session.exec(
+            select(PointLedger).where(
+                PointLedger.participant_id == participant_id,
+                PointLedger.reason == "zone.event_registration",
+                PointLedger.reference_id == registration.id,
+            )
+        )
+        assert registration.participant_id == participant_id
+        assert len(list(ledger_entries.all())) == 1
+
+
+@pytest.mark.asyncio
 async def test_postgres_concurrent_zone_scans_with_different_keys_award_once(
     pg_client, pg_create_user, pg_session_factory
 ):
@@ -161,7 +235,10 @@ async def test_postgres_concurrent_zone_scans_with_different_keys_award_once(
             zone_type="booth",
             status="green",
             location="Hall PG",
-            points=35,
+            points=0,
+            registration_required=True,
+            registration_points=0,
+            check_in_points=35,
             color="#22C55E",
             tags=["pg"],
             is_active=True,
@@ -238,7 +315,10 @@ async def test_postgres_concurrent_zone_scans_same_idempotency_return_same_respo
             zone_type="booth",
             status="green",
             location="Hall PG",
-            points=20,
+            points=0,
+            registration_required=True,
+            registration_points=0,
+            check_in_points=20,
             color="#22C55E",
             tags=["pg"],
             is_active=True,
@@ -329,7 +409,10 @@ async def test_postgres_zone_check_in_partial_unique_index_blocks_duplicate_ledg
             zone_type="booth",
             status="green",
             location="Hall PG",
-            points=15,
+            points=0,
+            registration_required=True,
+            registration_points=0,
+            check_in_points=15,
             color="#22C55E",
             tags=["pg"],
             is_active=True,

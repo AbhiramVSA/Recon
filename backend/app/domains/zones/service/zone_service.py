@@ -34,6 +34,7 @@ from app.domains.zones.schemas import (
 
 QR_TOKEN_TTL = datetime.timedelta(hours=12)
 QR_TOKEN_TYPE = "zone_registration_qr"
+ZONE_REGISTRATION_REASON = "zone.event_registration"
 ZONE_CHECK_IN_REASON = "zone.event_check_in"
 INVALID_QR_REASON = "expired_or_tampered_or_not_registered"
 SCAN_REQUEST_WAIT_ATTEMPTS = 40
@@ -66,7 +67,10 @@ def _serialize_zone_catalog_item(zone, registered_count: int) -> ZoneCatalogItem
         tags=zone.tags or [],
         status=zone.status.value if hasattr(zone.status, "value") else str(zone.status),
         location=zone.location,
-        points=zone.points,
+        points=zone.registration_points,
+        registrationRequired=zone.registration_required,
+        registrationPoints=zone.registration_points,
+        checkInPoints=zone.check_in_points,
         registeredCount=registered_count,
         color=zone.color,
     )
@@ -77,12 +81,19 @@ def _serialize_zone_read(zone, registered_count: int) -> ZoneRead:
     return ZoneRead(**row.model_dump(), createdAt=zone.created_at, updatedAt=zone.updated_at)
 
 
-def _serialize_zone_registration(registration: ZoneRegistration) -> ZoneRegistrationRead:
+def _serialize_zone_registration(
+    registration: ZoneRegistration,
+    *,
+    points_awarded: int = 0,
+    new_points_balance: int | None = None,
+) -> ZoneRegistrationRead:
     return ZoneRegistrationRead(
         zoneId=registration.zone_id,
         isActive=registration.is_active,
         code=registration.pass_code,
         checkedInAt=registration.checked_in_at,
+        pointsAwarded=points_awarded,
+        newPointsBalance=new_points_balance,
     )
 
 
@@ -108,13 +119,19 @@ def _build_registration_qr_token(*, registration: ZoneRegistration, zone: Zone) 
 
 
 def _build_event_registration_response(
-    *, registration: ZoneRegistration, zone: Zone
+    *,
+    registration: ZoneRegistration,
+    zone: Zone,
+    points_awarded: int = 0,
+    new_points_balance: int | None = None,
 ) -> EventRegistrationQrRead:
     return EventRegistrationQrRead(
         registrationId=registration.id,
         eventId=zone.short_name,
         qrToken=_build_registration_qr_token(registration=registration, zone=zone),
         qrExpiresAt=registration.qr_expires_at,
+        pointsAwarded=points_awarded,
+        newPointsBalance=new_points_balance,
     )
 
 
@@ -171,6 +188,10 @@ def _build_scan_request_fingerprint(
 
 def _build_points_idempotency_key(*, registration_id: uuid.UUID) -> str:
     return f"zone-check-in:{registration_id}"
+
+
+def _build_registration_points_idempotency_key(*, registration_id: uuid.UUID) -> str:
+    return f"zone-registration:{registration_id}"
 
 
 def _ensure_scan_request_payload_match(
@@ -345,6 +366,36 @@ async def _ensure_fresh_registration_qr(
     )
 
 
+async def _award_registration_points_if_needed(
+    db: AsyncSession,
+    *,
+    participant: Participant,
+    registration: ZoneRegistration,
+    zone: Zone,
+    actor: User,
+    created: bool,
+) -> tuple[int, int | None]:
+    if not created or zone.registration_points <= 0:
+        balance = await get_balance_for_participant(db, participant_id=participant.id)
+        return 0, balance
+
+    _, new_balance = await award_points(
+        db,
+        payload=PointAwardCreate(
+            participant_id=participant.id,
+            amount=zone.registration_points,
+            reason=ZONE_REGISTRATION_REASON,
+            reference_id=registration.id,
+            idempotency_key=_build_registration_points_idempotency_key(
+                registration_id=registration.id
+            ),
+            note=f"Zone registration: {zone.name}",
+        ),
+        actor=actor,
+    )
+    return zone.registration_points, new_balance
+
+
 def _serialize_scan_checked_in_response(
     *,
     check_in: ZoneCheckIn,
@@ -420,12 +471,32 @@ async def register_for_zone(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant profile not found")
 
     zone = await _get_zone_or_404_by_identifier(db, zone_identifier=zone_identifier)
+    if not zone.registration_required:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This zone does not require registration",
+        )
     registration, created = await _ensure_registration(
         db,
         participant_id=participant.id,
         zone_id=zone.id,
     )
-    return _serialize_zone_registration(registration), created
+    points_awarded, new_points_balance = await _award_registration_points_if_needed(
+        db,
+        participant=participant,
+        registration=registration,
+        zone=zone,
+        actor=user,
+        created=created,
+    )
+    return (
+        _serialize_zone_registration(
+            registration,
+            points_awarded=points_awarded,
+            new_points_balance=new_points_balance,
+        ),
+        created,
+    )
 
 
 async def create_event_registration(
@@ -441,13 +512,34 @@ async def create_event_registration(
         participant_id=payload.participantId,
     )
     zone = await _get_zone_or_404_by_short_name(db, short_name=event_id)
+    if not zone.registration_required:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This zone does not require registration",
+        )
     registration, created = await _ensure_registration(
         db,
         participant_id=participant.id,
         zone_id=zone.id,
     )
     registration = await _ensure_fresh_registration_qr(db, registration=registration)
-    return _build_event_registration_response(registration=registration, zone=zone), created
+    points_awarded, new_points_balance = await _award_registration_points_if_needed(
+        db,
+        participant=participant,
+        registration=registration,
+        zone=zone,
+        actor=user,
+        created=created,
+    )
+    return (
+        _build_event_registration_response(
+            registration=registration,
+            zone=zone,
+            points_awarded=points_awarded,
+            new_points_balance=new_points_balance,
+        ),
+        created,
+    )
 
 
 async def get_registration_qr(
@@ -636,24 +728,28 @@ async def scan_registration_check_in(
         )
         return duplicate_payload, status.HTTP_200_OK
 
-    ledger_entry, new_balance = await award_points(
-        db,
-        payload=PointAwardCreate(
-            participant_id=participant.id,
-            amount=zone.points,
-            reason=ZONE_CHECK_IN_REASON,
-            reference_id=registration.id,
-            idempotency_key=_build_points_idempotency_key(registration_id=registration.id),
-            note=f"Zone check-in: {zone.name}",
-        ),
-        actor=actor,
-    )
+    if zone.check_in_points > 0:
+        ledger_entry, new_balance = await award_points(
+            db,
+            payload=PointAwardCreate(
+                participant_id=participant.id,
+                amount=zone.check_in_points,
+                reason=ZONE_CHECK_IN_REASON,
+                reference_id=registration.id,
+                idempotency_key=_build_points_idempotency_key(registration_id=registration.id),
+                note=f"Zone check-in: {zone.name}",
+            ),
+            actor=actor,
+        )
+    else:
+        ledger_entry = None
+        new_balance = await get_balance_for_participant(db, participant_id=participant.id)
     check_in = await crud.update_check_in_award(
         db,
         check_in=check_in,
-        points_awarded=zone.points,
+        points_awarded=zone.check_in_points,
         resulting_balance=new_balance,
-        point_ledger_entry_id=ledger_entry.id,
+        point_ledger_entry_id=ledger_entry.id if ledger_entry is not None else None,
     )
     await crud.update_registration(
         db,

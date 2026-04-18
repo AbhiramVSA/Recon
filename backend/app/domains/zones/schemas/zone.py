@@ -14,6 +14,9 @@ class ZoneCatalogItemRead(SQLModel):
     status: str
     location: str
     points: int
+    registrationRequired: bool
+    registrationPoints: int
+    checkInPoints: int
     registeredCount: int
     color: str
 
@@ -28,6 +31,8 @@ class ZoneRegistrationRead(SQLModel):
     isActive: bool
     code: str
     checkedInAt: datetime.datetime | None = None
+    pointsAwarded: int = 0
+    newPointsBalance: int | None = None
 
 
 class ZonePassRead(SQLModel):
@@ -54,6 +59,8 @@ class EventRegistrationQrRead(SQLModel):
     eventId: str
     qrToken: str
     qrExpiresAt: datetime.datetime
+    pointsAwarded: int = 0
+    newPointsBalance: int | None = None
 
 
 class AdminScanCheckInCreate(SQLModel):

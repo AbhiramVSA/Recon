@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import uuid
 from uuid import uuid4
@@ -18,7 +17,10 @@ async def _create_zone(
     name: str,
     short_name: str,
     is_active: bool = True,
-    points: int = 50,
+    points: int | None = None,
+    registration_required: bool = True,
+    registration_points: int = 0,
+    check_in_points: int = 0,
 ) -> Zone:
     async with session_factory() as session:
         zone = Zone(
@@ -28,7 +30,10 @@ async def _create_zone(
             zone_type="booth",
             status="green",
             location="Hall A",
-            points=points,
+            points=registration_points if points is None else points,
+            registration_required=registration_required,
+            registration_points=registration_points,
+            check_in_points=check_in_points,
             color="#22C55E",
             tags=["security", "network"],
             is_active=is_active,
@@ -54,13 +59,23 @@ async def test_zone_catalog_and_detail(client, auth_override, create_user, sessi
     user = await create_user(email="zones-list@example.com", username="zoneslist")
     auth_override(user)
 
-    zone_a = await _create_zone(session_factory, name="Network Warfare", short_name="NW")
+    zone_a = await _create_zone(
+        session_factory,
+        name="Network Warfare",
+        short_name="NW",
+        registration_points=100,
+        check_in_points=0,
+    )
     await _create_zone(session_factory, name="Legacy Inactive", short_name="LI", is_active=False)
 
     catalog = await client.get("/api/v1/zones")
     assert catalog.status_code == 200
     assert len(catalog.json()) == 1
     assert catalog.json()[0]["shortName"] == "NW"
+    assert catalog.json()[0]["points"] == 100
+    assert catalog.json()[0]["registrationRequired"] is True
+    assert catalog.json()[0]["registrationPoints"] == 100
+    assert catalog.json()[0]["checkInPoints"] == 0
     assert catalog.json()[0]["registeredCount"] == 0
 
     detail = await client.get(f"/api/v1/zones/{zone_a.id}")
@@ -68,6 +83,7 @@ async def test_zone_catalog_and_detail(client, auth_override, create_user, sessi
     assert detail.json()["id"] == str(zone_a.id)
     assert detail.json()["name"] == "Network Warfare"
     assert detail.json()["type"] == "booth"
+    assert detail.json()["registrationRequired"] is True
 
     detail_by_short_name = await client.get("/api/v1/zones/NW")
     assert detail_by_short_name.status_code == 200
@@ -82,7 +98,12 @@ async def test_zone_register_unregister_and_me_endpoints(
     user = await create_user(email="zones-reg@example.com", username="zonesreg")
     await _create_profile(client, auth_override, user, display_name="zone-regger")
 
-    zone = await _create_zone(session_factory, name="Forensics", short_name="FORENSICS")
+    zone = await _create_zone(
+        session_factory,
+        name="Forensics",
+        short_name="FORENSICS",
+        registration_points=100,
+    )
 
     auth_override(user)
     register = await client.post(f"/api/v1/zones/{zone.id}/register")
@@ -90,11 +111,19 @@ async def test_zone_register_unregister_and_me_endpoints(
     first_code = register.json()["code"]
     assert register.json()["zoneId"] == str(zone.id)
     assert register.json()["isActive"] is True
+    assert register.json()["pointsAwarded"] == 100
+    assert register.json()["newPointsBalance"] == 100
     assert first_code
 
     register_again = await client.post(f"/api/v1/zones/{zone.id}/register")
     assert register_again.status_code == 200
     assert register_again.json()["code"] == first_code
+    assert register_again.json()["pointsAwarded"] == 0
+    assert register_again.json()["newPointsBalance"] == 100
+
+    points_me = await client.get("/api/v1/points/me")
+    assert points_me.status_code == 200
+    assert points_me.json()["balance"] == 100
 
     regs = await client.get("/api/v1/me/registrations")
     assert regs.status_code == 200
@@ -121,13 +150,19 @@ async def test_zone_register_unregister_accepts_short_name_identifier(
     user = await create_user(email="zones-reg-short@example.com", username="zonesregshort")
     await _create_profile(client, auth_override, user, display_name="zone-reg-short")
 
-    zone = await _create_zone(session_factory, name="Capture The Flag", short_name="ctf")
+    zone = await _create_zone(
+        session_factory,
+        name="Capture The Flag",
+        short_name="ctf",
+        registration_points=100,
+    )
 
     auth_override(user)
     register = await client.post("/api/v1/zones/ctf/register")
     assert register.status_code == 201
     assert register.json()["zoneId"] == str(zone.id)
     assert register.json()["isActive"] is True
+    assert register.json()["pointsAwarded"] == 100
 
     unregister = await client.delete("/api/v1/zones/CTF/register")
     assert unregister.status_code == 200
@@ -136,12 +171,45 @@ async def test_zone_register_unregister_accepts_short_name_identifier(
 
 
 @pytest.mark.asyncio
+async def test_zone_register_rejects_zones_that_do_not_require_registration(
+    client, auth_override, create_user, session_factory
+):
+    user = await create_user(email="zones-no-register@example.com", username="zonesnoreg")
+    await _create_profile(client, auth_override, user, display_name="zone-no-register")
+
+    zone = await _create_zone(
+        session_factory,
+        name="Art Zone",
+        short_name="art",
+        registration_required=False,
+        registration_points=0,
+        check_in_points=0,
+        points=0,
+    )
+
+    auth_override(user)
+    register = await client.post("/api/v1/zones/art/register")
+    assert register.status_code == 400
+    assert register.json()["detail"] == "This zone does not require registration"
+
+    detail = await client.get(f"/api/v1/zones/{zone.id}")
+    assert detail.status_code == 200
+    assert detail.json()["registrationRequired"] is False
+    assert detail.json()["points"] == 0
+
+
+@pytest.mark.asyncio
 async def test_event_registration_and_qr_fetch_returns_signed_token(
     client, auth_override, create_user, session_factory
 ):
     user = await create_user(email="zones-event@example.com", username="zonesevent")
     await _create_profile(client, auth_override, user, display_name="zone-event")
-    zone = await _create_zone(session_factory, name="AppSec Zone", short_name="appsec")
+    zone = await _create_zone(
+        session_factory,
+        name="AppSec Zone",
+        short_name="appsec",
+        registration_points=100,
+    )
 
     auth_override(user)
     register = await client.post("/api/v1/events/appsec/registrations")
@@ -151,6 +219,8 @@ async def test_event_registration_and_qr_fetch_returns_signed_token(
     assert body["registrationId"]
     assert body["qrToken"]
     assert body["qrExpiresAt"]
+    assert body["pointsAwarded"] == 100
+    assert body["newPointsBalance"] == 100
 
     decoded = jwt.decode(
         body["qrToken"],
@@ -173,7 +243,12 @@ async def test_registration_qr_fetch_rotates_when_existing_token_has_expired(
 ):
     user = await create_user(email="zones-refresh@example.com", username="zonesrefresh")
     await _create_profile(client, auth_override, user, display_name="zone-refresh")
-    await _create_zone(session_factory, name="Refresh Zone", short_name="refresh-zone")
+    await _create_zone(
+        session_factory,
+        name="Refresh Zone",
+        short_name="refresh-zone",
+        registration_points=100,
+    )
 
     auth_override(user)
     register = await client.post("/api/v1/events/refresh-zone/registrations")
@@ -220,13 +295,22 @@ async def test_admin_scan_check_in_is_atomic_and_duplicate_safe(
         participant_user,
         display_name="zone-scan-player",
     )
-    zone = await _create_zone(session_factory, name="AppSec Zone", short_name="appsec", points=50)
+    zone = await _create_zone(
+        session_factory,
+        name="Scan Zone",
+        short_name="scan-zone",
+        registration_points=0,
+        check_in_points=50,
+        points=0,
+    )
 
     auth_override(participant_user)
-    register = await client.post("/api/v1/events/appsec/registrations", json={})
+    register = await client.post("/api/v1/events/scan-zone/registrations", json={})
     assert register.status_code == 201
     qr_token = register.json()["qrToken"]
     registration_id = register.json()["registrationId"]
+    assert register.json()["pointsAwarded"] == 0
+    assert register.json()["newPointsBalance"] == 0
 
     auth_override(admin_user)
     first = await client.post(
@@ -241,8 +325,8 @@ async def test_admin_scan_check_in_is_atomic_and_duplicate_safe(
     assert first.status_code == 200
     assert first.json()["status"] == "checked_in"
     assert first.json()["participantId"] == str(participant_id)
-    assert first.json()["eventId"] == "appsec"
-    assert first.json()["eventName"] == "AppSec Zone"
+    assert first.json()["eventId"] == "scan-zone"
+    assert first.json()["eventName"] == "Scan Zone"
     assert first.json()["pointsAwarded"] == 50
     assert first.json()["newPointsBalance"] == 50
     check_in_id = first.json()["checkInId"]
@@ -328,7 +412,12 @@ async def test_zone_register_requires_participant_profile(client, auth_override,
     user = await create_user(email="zones-noprofile@example.com", username="zonesnoprofile")
     auth_override(user)
 
-    zone = await _create_zone(session_factory, name="Red Team", short_name="REDTEAM")
+    zone = await _create_zone(
+        session_factory,
+        name="Red Team",
+        short_name="REDTEAM",
+        registration_points=100,
+    )
     register = await client.post(f"/api/v1/zones/{zone.id}/register")
     assert register.status_code == 404
     assert "Participant profile not found" in register.json()["detail"]
@@ -367,26 +456,31 @@ async def test_me_passes_returns_checked_in_timestamp(client, auth_override, cre
 
 
 @pytest.mark.asyncio
-async def test_concurrent_register_same_zone_is_idempotent(
+async def test_repeat_register_same_zone_keeps_single_active_registration(
     client, auth_override, create_user, session_factory
 ):
     user = await create_user(email="zones-race@example.com", username="zonesrace")
     await _create_profile(client, auth_override, user, display_name="zone-race")
-    zone = await _create_zone(session_factory, name="Race Zone", short_name="RACEZONE")
+    zone = await _create_zone(
+        session_factory,
+        name="Race Zone",
+        short_name="RACEZONE",
+        registration_points=100,
+    )
 
     auth_override(user)
-
-    async def _register():
-        return await client.post(f"/api/v1/zones/{zone.id}/register")
-
-    r1, r2 = await asyncio.gather(_register(), _register())
-    statuses = [r1.status_code, r2.status_code]
-    assert set(statuses).issubset({200, 201})
-    assert 201 in statuses
+    r1 = await client.post(f"/api/v1/zones/{zone.id}/register")
+    r2 = await client.post(f"/api/v1/zones/{zone.id}/register")
+    assert r1.status_code == 201
+    assert r2.status_code == 200
 
     regs = await client.get("/api/v1/me/registrations")
     assert regs.status_code == 200
     assert regs.json()["zoneIds"] == [str(zone.id)]
+
+    points_me = await client.get("/api/v1/points/me")
+    assert points_me.status_code == 200
+    assert points_me.json()["balance"] == 100
 
     async with session_factory() as session:
         count_stmt = (
