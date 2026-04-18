@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.domains.auth.models import User
 from app.domains.incidents import crud
 from app.domains.incidents.models import Incident, IncidentSeverity, IncidentStatus
 from app.domains.incidents.schemas import IncidentCreate, IncidentUpdate
@@ -46,6 +47,12 @@ async def update_incident(
     incident = await get_incident(db, incident_id=incident_id)
 
     update_data = obj_in.model_dump(exclude_unset=True)
+
+    assigned_to = update_data.get("assigned_to")
+    if assigned_to is not None:
+        assigned_user = await db.get(User, assigned_to)
+        if assigned_user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned user not found")
 
     # If transitioning to resolved, stamp resolved_at
     if "status" in update_data and update_data["status"] == IncidentStatus.resolved:

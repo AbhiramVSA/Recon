@@ -10,7 +10,7 @@ from app.domains.auth.crud import (
     get_refresh_token_by_hash, get_user_by_email, get_user_by_id,
     revoke_active_tokens_for_user,
 )
-from app.domains.auth.models import User
+from app.domains.auth.models import ROLE_ADMIN, User
 from app.domains.auth.service.google_oauth_allowlist_service import ensure_google_oauth_email_allowed
 from app.domains.auth.service.helpers import (
     build_unique_username,
@@ -23,7 +23,13 @@ from app.domains.auth.service.helpers import (
 async def find_or_create_oauth_user(
     db: AsyncSession, *, provider: str, provider_user_id: str, email: str
 ) -> User:
-    normalized_email = ensure_google_oauth_email_allowed(email)
+    normalized_email = email.strip().lower()
+    existing_user = await get_user_by_email(db, normalized_email, with_role=True)
+    if existing_user and existing_user.role and existing_user.role.name == ROLE_ADMIN:
+        normalized_email = normalized_email
+    else:
+        normalized_email = ensure_google_oauth_email_allowed(normalized_email)
+
     default_role = await get_default_role_for_email(db, normalized_email)
 
     oauth_account = await get_oauth_account(db, provider=provider, provider_user_id=provider_user_id)
@@ -33,7 +39,7 @@ async def find_or_create_oauth_user(
             await ensure_bootstrap_admin_role(db, user)
             return user
 
-    user = await get_user_by_email(db, normalized_email, with_role=True)
+    user = existing_user
     if user:
         if not user.role_id:
             user.role = default_role

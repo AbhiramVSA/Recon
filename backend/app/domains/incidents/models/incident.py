@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
+from app.domains.auth.models import User  # noqa: F401  # Registers the users table for FK resolution.
 from app.utils.models.base import Base
 
 

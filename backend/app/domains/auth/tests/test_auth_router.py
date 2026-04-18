@@ -195,6 +195,29 @@ async def test_oauth_existing_bootstrap_admin_email_is_promoted(session_factory,
         assert user.role.name == ROLE_ADMIN
 
 
+@pytest.mark.asyncio
+async def test_oauth_existing_admin_user_can_sign_in_outside_file_allowlist(
+    session_factory, seeded_roles, create_user, monkeypatch
+):
+    monkeypatch.setattr(settings, "BOOTSTRAP_ADMIN_EMAILS", [])
+    await create_user(
+        role_name=ROLE_ADMIN,
+        email="existing-admin@example.com",
+        username="existingadmin",
+    )
+
+    async with session_factory() as session:
+        user = await find_or_create_oauth_user(
+            session,
+            provider="google",
+            provider_user_id="existing-admin-google-user",
+            email="existing-admin@example.com",
+        )
+
+        assert user.role is not None
+        assert user.role.name == ROLE_ADMIN
+
+
 def test_settings_build_google_redirect_from_api_base_url():
     config = Settings(
         _env_file=None,
