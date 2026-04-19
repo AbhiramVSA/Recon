@@ -1,13 +1,13 @@
 import datetime
 import uuid
 
-from sqlmodel import SQLModel
+from sqlmodel import Field, SQLModel
 
 
 class ParticipantCreate(SQLModel):
     display_name: str
     institution: str
-    year: int
+    year: int = Field(ge=1, le=5)
     linkedin_acc: str | None = None
     github_acc: str | None = None
     x_acc: str | None = None
@@ -20,7 +20,7 @@ class ParticipantCreate(SQLModel):
 class ParticipantUpdate(SQLModel):
     display_name: str | None = None
     institution: str | None = None
-    year: int | None = None
+    year: int | None = Field(default=None, ge=1, le=5)
     linkedin_acc: str | None = None
     github_acc: str | None = None
     x_acc: str | None = None

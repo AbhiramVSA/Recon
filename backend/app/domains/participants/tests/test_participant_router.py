@@ -41,6 +41,52 @@ async def test_create_and_get_my_participant_profile(client, auth_override, crea
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("year", [0, 6])
+async def test_create_my_participant_profile_rejects_invalid_year(
+    client, auth_override, create_user, year
+):
+    user = await create_user(email=f"invalid-year-{year}@example.com", username=f"invalidyear{year}")
+    auth_override(user)
+
+    response = await client.post(
+        "/api/v1/participants/me",
+        json={
+            "display_name": "invalid-year",
+            "institution": "VIT-AP",
+            "year": year,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("year", [0, 6])
+async def test_update_my_participant_profile_rejects_invalid_year(
+    client, auth_override, create_user, year
+):
+    user = await create_user(email=f"invalid-update-{year}@example.com", username=f"invalidupdate{year}")
+    auth_override(user)
+
+    create_response = await client.post(
+        "/api/v1/participants/me",
+        json={
+            "display_name": "valid-year",
+            "institution": "VIT-AP",
+            "year": 2,
+        },
+    )
+    assert create_response.status_code == 201
+
+    response = await client.patch(
+        "/api/v1/participants/me",
+        json={"year": year},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_other_authenticated_user_sees_read_only_participant_view(client, auth_override, create_user):
     owner = await create_user(email="owner@example.com", username="owner")
     viewer = await create_user(email="viewer@example.com", username="viewer")
