@@ -17,6 +17,7 @@ class UserCreate(SQLModel):
     email: EmailStr
     username: str
     password: str
+    role_name: str | None = None
 
 
 class UserRead(UserBase):

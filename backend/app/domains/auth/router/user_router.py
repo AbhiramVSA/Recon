@@ -13,12 +13,16 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-async def create_user_route(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+async def create_user_route(
+    payload: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(ROLE_ADMIN)),
+):
     return await create_user(payload, db)
 
 
 @router.get("/", response_model=list[UserRead])
-async def list_users_route(skip: int = 0, limit: int = 20, db: AsyncSession = Depends(get_db),
+async def list_users_route(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db),
                             _: User = Depends(require_roles(ROLE_ADMIN))):
     return await list_users(db, skip=skip, limit=limit)
 

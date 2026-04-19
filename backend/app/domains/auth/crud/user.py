@@ -26,7 +26,15 @@ async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
 
 
 async def list_users(db: AsyncSession, *, skip: int = 0, limit: int = 20) -> list[User]:
-    return (await db.exec(select(User).options(joinedload(User.role)).offset(skip).limit(limit))).all()
+    return (
+        await db.exec(
+            select(User)
+            .options(joinedload(User.role))
+            .order_by(User.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+    ).all()
 
 
 async def create_user(

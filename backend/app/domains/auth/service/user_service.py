@@ -6,11 +6,22 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.domains.auth.crud import create_user, delete_user, get_user_by_id, list_users
 from app.domains.auth.models import User, ROLE_ADMIN
 from app.domains.auth.schemas import UserUpdate
-from app.domains.auth.service.helpers import get_default_role_for_email, hash_password
+from app.domains.auth.service.helpers import get_default_role_for_email, get_role_or_500, hash_password
 
 
-async def register_user(email: str, username: str, password: str, db: AsyncSession) -> User:
-    default_role = await get_default_role_for_email(db, email)
+async def register_user(
+    email: str,
+    username: str,
+    password: str,
+    db: AsyncSession,
+    *,
+    role_name: str | None = None,
+) -> User:
+    default_role = (
+        await get_role_or_500(db, role_name)
+        if role_name is not None
+        else await get_default_role_for_email(db, email)
+    )
     user = await create_user(db, email=email, username=username,
                              hashed_password=hash_password(password), role=default_role)
     registered = await get_user_by_id(db, user.id, with_role=True)
@@ -19,7 +30,7 @@ async def register_user(email: str, username: str, password: str, db: AsyncSessi
     return registered
 
 
-async def list_users_for_admin(db: AsyncSession, *, skip: int = 0, limit: int = 20) -> list[User]:
+async def list_users_for_admin(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> list[User]:
     return await list_users(db, skip=skip, limit=limit)
 
 

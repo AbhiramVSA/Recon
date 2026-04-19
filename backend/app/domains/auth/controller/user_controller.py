@@ -9,10 +9,16 @@ from app.domains.auth.service.user_service import register_user
 
 
 async def create_user(payload: UserCreate, db: AsyncSession) -> User:
-    return await register_user(email=payload.email, username=payload.username, password=payload.password, db=db)
+    return await register_user(
+        email=payload.email,
+        username=payload.username,
+        password=payload.password,
+        db=db,
+        role_name=payload.role_name,
+    )
 
 
-async def list_users(db: AsyncSession, *, skip: int = 0, limit: int = 20) -> list[User]:
+async def list_users(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> list[User]:
     return await list_users_for_admin(db, skip=skip, limit=limit)
 
 
