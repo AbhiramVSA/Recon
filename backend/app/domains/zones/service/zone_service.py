@@ -34,7 +34,6 @@ from app.domains.zones.schemas import (
 
 QR_TOKEN_TTL = datetime.timedelta(hours=12)
 QR_TOKEN_TYPE = "zone_registration_qr"
-ZONE_REGISTRATION_REASON = "zone.event_registration"
 ZONE_CHECK_IN_REASON = "zone.event_check_in"
 INVALID_QR_REASON = "expired_or_tampered_or_not_registered"
 SCAN_REQUEST_WAIT_ATTEMPTS = 40
@@ -67,7 +66,7 @@ def _serialize_zone_catalog_item(zone, registered_count: int) -> ZoneCatalogItem
         tags=zone.tags or [],
         status=zone.status.value if hasattr(zone.status, "value") else str(zone.status),
         location=zone.location,
-        points=zone.registration_points,
+        points=zone.check_in_points,
         registrationRequired=zone.registration_required,
         registrationPoints=zone.registration_points,
         checkInPoints=zone.check_in_points,
@@ -188,10 +187,6 @@ def _build_scan_request_fingerprint(
 
 def _build_points_idempotency_key(*, registration_id: uuid.UUID) -> str:
     return f"zone-check-in:{registration_id}"
-
-
-def _build_registration_points_idempotency_key(*, registration_id: uuid.UUID) -> str:
-    return f"zone-registration:{registration_id}"
 
 
 def _ensure_scan_request_payload_match(
@@ -366,36 +361,6 @@ async def _ensure_fresh_registration_qr(
     )
 
 
-async def _award_registration_points_if_needed(
-    db: AsyncSession,
-    *,
-    participant: Participant,
-    registration: ZoneRegistration,
-    zone: Zone,
-    actor: User,
-    created: bool,
-) -> tuple[int, int | None]:
-    if not created or zone.registration_points <= 0:
-        balance = await get_balance_for_participant(db, participant_id=participant.id)
-        return 0, balance
-
-    _, new_balance = await award_points(
-        db,
-        payload=PointAwardCreate(
-            participant_id=participant.id,
-            amount=zone.registration_points,
-            reason=ZONE_REGISTRATION_REASON,
-            reference_id=registration.id,
-            idempotency_key=_build_registration_points_idempotency_key(
-                registration_id=registration.id
-            ),
-            note=f"Zone registration: {zone.name}",
-        ),
-        actor=actor,
-    )
-    return zone.registration_points, new_balance
-
-
 def _serialize_scan_checked_in_response(
     *,
     check_in: ZoneCheckIn,
@@ -481,18 +446,11 @@ async def register_for_zone(
         participant_id=participant.id,
         zone_id=zone.id,
     )
-    points_awarded, new_points_balance = await _award_registration_points_if_needed(
-        db,
-        participant=participant,
-        registration=registration,
-        zone=zone,
-        actor=user,
-        created=created,
-    )
+    new_points_balance = await get_balance_for_participant(db, participant_id=participant.id)
     return (
         _serialize_zone_registration(
             registration,
-            points_awarded=points_awarded,
+            points_awarded=0,
             new_points_balance=new_points_balance,
         ),
         created,
@@ -523,19 +481,12 @@ async def create_event_registration(
         zone_id=zone.id,
     )
     registration = await _ensure_fresh_registration_qr(db, registration=registration)
-    points_awarded, new_points_balance = await _award_registration_points_if_needed(
-        db,
-        participant=participant,
-        registration=registration,
-        zone=zone,
-        actor=user,
-        created=created,
-    )
+    new_points_balance = await get_balance_for_participant(db, participant_id=participant.id)
     return (
         _build_event_registration_response(
             registration=registration,
             zone=zone,
-            points_awarded=points_awarded,
+            points_awarded=0,
             new_points_balance=new_points_balance,
         ),
         created,

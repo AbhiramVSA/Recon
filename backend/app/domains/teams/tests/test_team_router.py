@@ -53,6 +53,27 @@ async def test_join_team_with_invite_code(client, auth_override, create_user):
 
 
 @pytest.mark.asyncio
+async def test_join_team_normalizes_pasted_invite_code(client, auth_override, create_user):
+    owner = await create_user(email="team-normalize-owner@example.com", username="teamnormalizeowner")
+    joiner = await create_user(email="team-normalize-joiner@example.com", username="teamnormalizejoiner")
+    await _create_participant(client, auth_override, owner, "normalize-lead")
+    await _create_participant(client, auth_override, joiner, "normalize-joiner")
+
+    auth_override(owner)
+    create_team = await client.post("/api/v1/teams/", json={"name": "Normalize Crew"})
+    invite_code = create_team.json()["invite_code"]
+
+    auth_override(joiner)
+    join_team = await client.post("/api/v1/teams/join", json={"invite_code": f"  {invite_code.lower()}  "})
+
+    assert join_team.status_code == 200
+    assert {member["display_name"] for member in join_team.json()["members"]} == {
+        "normalize-lead",
+        "normalize-joiner",
+    }
+
+
+@pytest.mark.asyncio
 async def test_participant_cannot_use_self_service_twice_even_after_admin_removal(
     client, auth_override, create_user
 ):

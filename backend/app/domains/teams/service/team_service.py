@@ -39,14 +39,16 @@ async def create_team_for_user(
     if await crud.get_team_by_name(db, name=payload.name):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Team name already exists")
 
-    team = await crud.create_team(
-        db,
-        name=payload.name,
-        invite_code=await _generate_invite_code(db),
-        created_by_participant_id=participant.id,
-    )
-    await crud.create_membership(db, team_id=team.id, participant_id=participant.id)
+    async with db.begin_nested():
+        team = await crud.create_team(
+            db,
+            name=payload.name,
+            invite_code=await _generate_invite_code(db),
+            created_by_participant_id=participant.id,
+        )
+        await crud.create_membership(db, team_id=team.id, participant_id=participant.id)
     participant.team_self_service_locked = True
+    await db.flush()
     return await _build_team_read(db, team)
 
 
@@ -60,17 +62,20 @@ async def join_team_for_user(db: AsyncSession, *, user: User, payload: TeamJoin)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
 
     try:
-        await crud.create_membership(db, team_id=team.id, participant_id=participant.id)
+        async with db.begin_nested():
+            await crud.create_membership(db, team_id=team.id, participant_id=participant.id)
     except IntegrityError:
         existing = await crud.get_membership_by_participant_id(db, participant_id=participant.id)
         if existing and existing.team_id == team.id:
             participant.team_self_service_locked = True
+            await db.flush()
             return await _build_team_read(db, team)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Participant is already in a team",
         )
     participant.team_self_service_locked = True
+    await db.flush()
     return await _build_team_read(db, team)
 
 

@@ -64,7 +64,7 @@ async def test_zone_catalog_and_detail(client, auth_override, create_user, sessi
         name="Network Warfare",
         short_name="NW",
         registration_points=100,
-        check_in_points=0,
+        check_in_points=25,
     )
     await _create_zone(session_factory, name="Legacy Inactive", short_name="LI", is_active=False)
 
@@ -72,10 +72,10 @@ async def test_zone_catalog_and_detail(client, auth_override, create_user, sessi
     assert catalog.status_code == 200
     assert len(catalog.json()) == 1
     assert catalog.json()[0]["shortName"] == "NW"
-    assert catalog.json()[0]["points"] == 100
+    assert catalog.json()[0]["points"] == 25
     assert catalog.json()[0]["registrationRequired"] is True
     assert catalog.json()[0]["registrationPoints"] == 100
-    assert catalog.json()[0]["checkInPoints"] == 0
+    assert catalog.json()[0]["checkInPoints"] == 25
     assert catalog.json()[0]["registeredCount"] == 0
 
     detail = await client.get(f"/api/v1/zones/{zone_a.id}")
@@ -111,19 +111,19 @@ async def test_zone_register_unregister_and_me_endpoints(
     first_code = register.json()["code"]
     assert register.json()["zoneId"] == str(zone.id)
     assert register.json()["isActive"] is True
-    assert register.json()["pointsAwarded"] == 100
-    assert register.json()["newPointsBalance"] == 100
+    assert register.json()["pointsAwarded"] == 0
+    assert register.json()["newPointsBalance"] == 0
     assert first_code
 
     register_again = await client.post(f"/api/v1/zones/{zone.id}/register")
     assert register_again.status_code == 200
     assert register_again.json()["code"] == first_code
     assert register_again.json()["pointsAwarded"] == 0
-    assert register_again.json()["newPointsBalance"] == 100
+    assert register_again.json()["newPointsBalance"] == 0
 
     points_me = await client.get("/api/v1/points/me")
     assert points_me.status_code == 200
-    assert points_me.json()["balance"] == 100
+    assert points_me.json()["balance"] == 0
 
     regs = await client.get("/api/v1/me/registrations")
     assert regs.status_code == 200
@@ -162,7 +162,7 @@ async def test_zone_register_unregister_accepts_short_name_identifier(
     assert register.status_code == 201
     assert register.json()["zoneId"] == str(zone.id)
     assert register.json()["isActive"] is True
-    assert register.json()["pointsAwarded"] == 100
+    assert register.json()["pointsAwarded"] == 0
 
     unregister = await client.delete("/api/v1/zones/CTF/register")
     assert unregister.status_code == 200
@@ -219,8 +219,8 @@ async def test_event_registration_and_qr_fetch_returns_signed_token(
     assert body["registrationId"]
     assert body["qrToken"]
     assert body["qrExpiresAt"]
-    assert body["pointsAwarded"] == 100
-    assert body["newPointsBalance"] == 100
+    assert body["pointsAwarded"] == 0
+    assert body["newPointsBalance"] == 0
 
     decoded = jwt.decode(
         body["qrToken"],
@@ -480,7 +480,7 @@ async def test_repeat_register_same_zone_keeps_single_active_registration(
 
     points_me = await client.get("/api/v1/points/me")
     assert points_me.status_code == 200
-    assert points_me.json()["balance"] == 100
+    assert points_me.json()["balance"] == 0
 
     async with session_factory() as session:
         count_stmt = (

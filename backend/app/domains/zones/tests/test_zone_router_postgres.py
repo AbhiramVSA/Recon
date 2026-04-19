@@ -139,7 +139,7 @@ def pg_auth_override():
 
 
 @pytest.mark.asyncio
-async def test_postgres_concurrent_zone_registration_awards_once(
+async def test_postgres_concurrent_zone_registration_creates_one_pass_and_awards_no_points(
     pg_client, pg_create_user, pg_session_factory
 ):
     player = await pg_create_user(email="pg-zone-register@example.com", username="pgzoneregister")
@@ -162,8 +162,8 @@ async def test_postgres_concurrent_zone_registration_awards_once(
             location="Hall PG",
             points=100,
             registration_required=True,
-            registration_points=100,
-            check_in_points=0,
+            registration_points=0,
+            check_in_points=100,
             color="#22C55E",
             tags=["pg"],
             is_active=True,
@@ -188,14 +188,14 @@ async def test_postgres_concurrent_zone_registration_awards_once(
     statuses = sorted([r1.status_code, r2.status_code])
     assert statuses == [200, 201]
     bodies = [r1.json(), r2.json()]
-    assert sorted(body["pointsAwarded"] for body in bodies) == [0, 100]
-    assert sorted(body["newPointsBalance"] for body in bodies) == [100, 100]
+    assert sorted(body["pointsAwarded"] for body in bodies) == [0, 0]
+    assert sorted(body["newPointsBalance"] for body in bodies) == [0, 0]
 
     _set_auth_cookie(pg_client, player, ROLE_PARTICIPANT)
     me = await pg_client.get("/api/v1/points/me")
     assert me.status_code == 200
     assert me.json()["participant_id"] == str(participant_id)
-    assert me.json()["balance"] == 100
+    assert me.json()["balance"] == 0
 
     async with pg_session_factory() as session:
         registration = (
@@ -204,12 +204,12 @@ async def test_postgres_concurrent_zone_registration_awards_once(
         ledger_entries = await session.exec(
             select(PointLedger).where(
                 PointLedger.participant_id == participant_id,
-                PointLedger.reason == "zone.event_registration",
+                PointLedger.reason == "zone.event_check_in",
                 PointLedger.reference_id == registration.id,
             )
         )
         assert registration.participant_id == participant_id
-        assert len(list(ledger_entries.all())) == 1
+        assert len(list(ledger_entries.all())) == 0
 
 
 @pytest.mark.asyncio
