@@ -4,9 +4,9 @@ This document is a direct knowledge transfer for the next agent working in this 
 
 ## 1. Repository Identity
 
-- Repo name: `recon-backend`
-- Root path: `C:\Users\Rikhil Nellimarla\Projects\recon-backend`
-- Primary app: FastAPI backend under `backend/app`
+- Repo name: `Recon`
+- Root path: `C:\Users\abhir\github\recon-backend`
+- Primary app: FastAPI backend under `recon-backend/app`
 - Event context: Recon is the backend for a cybersecurity fest. It powers the participant PWA, admin operations surfaces, sponsor/partner workflows, announcements, check-in state, and infrastructure helpers.
 
 This backend does not own registration or ticket scanning. Luma handles that. CTFd is external. KOTH is external. n8n is external. Do not rebuild those flows inside this app.
@@ -35,11 +35,11 @@ Rules that matter:
 
 The app is split first by audience:
 
-- `backend/app/domains/`: participant-facing product features
-- `backend/app/admin/`: admin/ops surface
-- `backend/app/partners/`: sponsor/partner surface
-- `backend/app/infrastructure/`: app-wide technical capabilities
-- `backend/app/utils/`: framework plumbing only
+- `recon-backend/app/domains/`: participant-facing product features
+- `recon-backend/app/admin/`: admin/ops surface
+- `recon-backend/app/partners/`: sponsor/partner surface
+- `recon-backend/app/infrastructure/`: app-wide technical capabilities
+- `recon-backend/app/utils/`: framework plumbing only
 
 The important architectural distinction is:
 
@@ -76,7 +76,7 @@ Do not assume a folder existing means the feature is usable. A lot of folders on
 
 ## 4. Live Router Surface
 
-The root API mount is in [backend/app/api/v1/api.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/api/v1/api.py).
+The root API mount is in [recon-backend/app/api/v1/api.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/api/v1/api.py).
 
 Currently mounted:
 
@@ -89,7 +89,7 @@ Currently mounted:
 
 That means any newly added feature is not live until it is explicitly mounted there.
 
-The main app bootstrap is in [backend/app/main.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/main.py). It:
+The main app bootstrap is in [recon-backend/app/main.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/main.py). It:
 
 - configures Logfire
 - warms the DB on startup
@@ -111,7 +111,7 @@ If startup fails, it is usually because one of these failed:
 
 ### Auth and User
 
-Auth lives in `backend/app/domains/auth`.
+Auth lives in `recon-backend/app/domains/auth`.
 
 Key points:
 
@@ -122,7 +122,7 @@ Key points:
 - Roles currently used are `admin`, `participant`, `partner`.
 - Default role is `participant`.
 
-The OAuth endpoints are in [backend/app/domains/auth/router/auth_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/domains/auth/router/auth_router.py).
+The OAuth endpoints are in [recon-backend/app/domains/auth/router/auth_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/domains/auth/router/auth_router.py).
 
 Important behavior:
 
@@ -136,7 +136,7 @@ Participants are intentionally separate from users.
 
 That domain decision matters and should not be collapsed casually.
 
-The participant model is in [backend/app/domains/participants/models/participant.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/domains/participants/models/participant.py).
+The participant model is in [recon-backend/app/domains/participants/models/participant.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/domains/participants/models/participant.py).
 
 Current model shape:
 
@@ -162,7 +162,7 @@ The important constraint is:
 
 So `Participant` is an optional one-to-one profile extension of `User`.
 
-Current participant router is in [backend/app/domains/participants/router/participant_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/domains/participants/router/participant_router.py).
+Current participant router is in [recon-backend/app/domains/participants/router/participant_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/domains/participants/router/participant_router.py).
 
 Implemented endpoints:
 
@@ -186,9 +186,9 @@ NFC persistence was intentionally deferred.
 
 ### Partners
 
-Partners are implemented as a horizontal surface under `backend/app/partners`.
+Partners are implemented as a horizontal surface under `recon-backend/app/partners`.
 
-The router is in [backend/app/partners/router/partner_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/partners/router/partner_router.py).
+The router is in [recon-backend/app/partners/router/partner_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/partners/router/partner_router.py).
 
 Implemented flows:
 
@@ -228,16 +228,16 @@ There is a schedule router and models in the repo, and it is mounted, but it sho
 
 ## 6. Storage System: Important Current State
 
-Storage lives in `backend/app/infrastructure/storage`.
+Storage lives in `recon-backend/app/infrastructure/storage`.
 
 Even though the filenames still say `r2`, the storage backend has already been moved conceptually toward AWS S3.
 
 Key files:
 
-- [backend/app/infrastructure/storage/router/r2_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/infrastructure/storage/router/r2_router.py)
-- [backend/app/infrastructure/storage/controller/r2_controller.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/infrastructure/storage/controller/r2_controller.py)
-- [backend/app/infrastructure/storage/service/r2_service.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/infrastructure/storage/service/r2_service.py)
-- [backend/app/infrastructure/storage/schemas/r2_schemas.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/infrastructure/storage/schemas/r2_schemas.py)
+- [recon-backend/app/infrastructure/storage/router/r2_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/infrastructure/storage/router/r2_router.py)
+- [recon-backend/app/infrastructure/storage/controller/r2_controller.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/infrastructure/storage/controller/r2_controller.py)
+- [recon-backend/app/infrastructure/storage/service/r2_service.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/infrastructure/storage/service/r2_service.py)
+- [recon-backend/app/infrastructure/storage/schemas/r2_schemas.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/infrastructure/storage/schemas/r2_schemas.py)
 
 Current route prefix is still `/r2`.
 
@@ -267,7 +267,7 @@ This is deliberate transitional naming, not a fully renamed surface.
 
 ## 7. Cache and Realtime
 
-`backend/app/infrastructure/cache/service` contains:
+`recon-backend/app/infrastructure/cache/service` contains:
 
 - `cache_service.py`
 - `keys.py`
@@ -280,7 +280,7 @@ The cache helpers exist and are intended for:
 - counters
 - pub/sub-related helpers
 
-Realtime code exists under `backend/app/infrastructure/realtime`.
+Realtime code exists under `recon-backend/app/infrastructure/realtime`.
 
 Files present:
 
@@ -292,7 +292,7 @@ But the authoritative status is muddy because `AGENTS.md` has unresolved conflic
 
 ## 8. Configuration Model
 
-Configuration is in [backend/app/core/config.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/core/config.py).
+Configuration is in [recon-backend/app/core/config.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/core/config.py).
 
 This file now matters more than before because production validation was tightened.
 
@@ -426,7 +426,7 @@ Treat scalar env values in Docker env files as unquoted unless a tool explicitly
 
 ## 10. Database and Alembic
 
-This repo uses Alembic with SQLModel metadata autodiscovery through [backend/app/models/__init__.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/models/__init__.py).
+This repo uses Alembic with SQLModel metadata autodiscovery through [recon-backend/app/models/__init__.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/models/__init__.py).
 
 This file is critical.
 
@@ -474,7 +474,7 @@ What was done to stabilize it:
 
 ### Current Alembic expectations
 
-Standard commands from `backend/`:
+Standard commands from `recon-backend/`:
 
 ```powershell
 uv run alembic current
@@ -502,7 +502,7 @@ The basic rule is:
 - send HTTP requests to the FastAPI app
 - assert status codes and meaningful response fields
 
-The shared backend fixtures are in [backend/tests/conftest.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/tests/conftest.py).
+The shared backend fixtures are in [recon-backend/tests/conftest.py](/C:/Users/abhir/github/recon-backend/recon-backend/tests/conftest.py).
 
 Important implementation details:
 
@@ -523,17 +523,17 @@ What this means in practice:
 
 Current test files worth reading:
 
-- [backend/app/domains/auth/tests/test_auth_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/domains/auth/tests/test_auth_router.py)
-- [backend/app/domains/participants/tests/test_participant_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/domains/participants/tests/test_participant_router.py)
-- [backend/app/partners/tests/test_partner_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/partners/tests/test_partner_router.py)
-- [backend/app/infrastructure/storage/tests/test_r2_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/infrastructure/storage/tests/test_r2_router.py)
+- [recon-backend/app/domains/auth/tests/test_auth_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/domains/auth/tests/test_auth_router.py)
+- [recon-backend/app/domains/participants/tests/test_participant_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/domains/participants/tests/test_participant_router.py)
+- [recon-backend/app/partners/tests/test_partner_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/partners/tests/test_partner_router.py)
+- [recon-backend/app/infrastructure/storage/tests/test_r2_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/infrastructure/storage/tests/test_r2_router.py)
 
 Typical commands:
 
 ```powershell
 uv run pytest
-uv run pytest backend/app/domains/participants/tests
-uv run pytest backend/app/partners/tests -q
+uv run pytest app/domains/participants/tests
+uv run pytest app/partners/tests -q
 uv run pytest -k participant -vv
 ```
 
@@ -603,7 +603,7 @@ This can confuse new contributors. It is a naming debt, not necessarily a runtim
 
 ### 3. Alembic can generate destructive migrations if the model aggregator is incomplete
 
-Always inspect `backend/app/models/__init__.py` before autogenerate if you are adding tables.
+Always inspect `recon-backend/app/models/__init__.py` before autogenerate if you are adding tables.
 
 ### 4. Docker env files should not quote scalar values
 
@@ -645,10 +645,10 @@ Do not reintroduce hardcoded callback or frontend redirect URLs.
 
 If you are asked to add a new domain feature:
 
-1. create the domain slice under `backend/app/domains/<feature>/`
+1. create the domain slice under `recon-backend/app/domains/<feature>/`
 2. implement model/schema/crud/service/controller/router
-3. add model import to `backend/app/models/__init__.py`
-4. mount the router in `backend/app/api/v1/api.py`
+3. add model import to `recon-backend/app/models/__init__.py`
+4. mount the router in `recon-backend/app/api/v1/api.py`
 5. write endpoint tests
 6. run pytest
 7. if schema changed, autogenerate Alembic and inspect it
@@ -688,16 +688,16 @@ These are not all urgent product features, but they would reduce future breakage
 
 If you only have time to read a few files, read these first:
 
-- [AGENTS.md](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/AGENTS.md)
-- [backend/app/main.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/main.py)
-- [backend/app/core/config.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/core/config.py)
-- [backend/app/api/v1/api.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/api/v1/api.py)
-- [backend/app/models/__init__.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/models/__init__.py)
-- [backend/tests/conftest.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/tests/conftest.py)
-- [backend/app/domains/auth/router/auth_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/domains/auth/router/auth_router.py)
-- [backend/app/domains/participants/router/participant_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/domains/participants/router/participant_router.py)
-- [backend/app/infrastructure/storage/router/r2_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/infrastructure/storage/router/r2_router.py)
-- [backend/app/partners/router/partner_router.py](/C:/Users/Rikhil%20Nellimarla/Projects/recon-backend/backend/app/partners/router/partner_router.py)
+- [AGENTS.md](/C:/Users/abhir/github/recon-backend/AGENTS.md)
+- [recon-backend/app/main.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/main.py)
+- [recon-backend/app/core/config.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/core/config.py)
+- [recon-backend/app/api/v1/api.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/api/v1/api.py)
+- [recon-backend/app/models/__init__.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/models/__init__.py)
+- [recon-backend/tests/conftest.py](/C:/Users/abhir/github/recon-backend/recon-backend/tests/conftest.py)
+- [recon-backend/app/domains/auth/router/auth_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/domains/auth/router/auth_router.py)
+- [recon-backend/app/domains/participants/router/participant_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/domains/participants/router/participant_router.py)
+- [recon-backend/app/infrastructure/storage/router/r2_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/infrastructure/storage/router/r2_router.py)
+- [recon-backend/app/partners/router/partner_router.py](/C:/Users/abhir/github/recon-backend/recon-backend/app/partners/router/partner_router.py)
 
 ## 19. Final Notes for the Next Agent
 

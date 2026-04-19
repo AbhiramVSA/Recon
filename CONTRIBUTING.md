@@ -1,4 +1,6 @@
-# Contributing to Recon Backend
+# Contributing to Recon
+
+Backend implementation lives in `recon-backend/`. Frontend implementation lives in `recon-frontend/`.
 
 ## Before you start
 
@@ -28,8 +30,8 @@ powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | ie
 | Add a new package | `uv add <package>` |
 | Remove a package | `uv remove <package>` |
 | Run any command inside the venv | `uv run <command>` |
-| Run the dev server | `uv run uvicorn app.main:app --reload --app-dir backend` |
-| Run Alembic | `cd backend && uv run alembic <subcommand>` |
+| Run the backend dev server | `cd recon-backend && uv run uvicorn app.main:app --reload` |
+| Run Alembic | `cd recon-backend && uv run alembic <subcommand>` |
 
 > Never run `pip install` manually. It bypasses the lockfile and will cause dependency drift.
 
@@ -38,20 +40,20 @@ powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | ie
 ## First-time local setup
 
 ```bash
-# 1. Install dependencies
+# 1. Install backend dependencies
+cd recon-backend
 uv sync
 
 # 2. Create your .env
-cp .env.example .env
+# PowerShell: New-Item .env -ItemType File
+# bash: touch .env
 # Fill in DATABASE_*, REDIS_URL, SECRET_KEY, GOOGLE_CLIENT_* at minimum
 
 # 3. Apply database migrations
-cd backend
 uv run alembic upgrade head
-cd ..
 
 # 4. Start the server
-uv run uvicorn app.main:app --reload --app-dir backend
+uv run uvicorn app.main:app --reload
 ```
 
 Visit `http://localhost:8000/docs` to confirm everything is running.
@@ -107,7 +109,7 @@ After creating the domain:
 2. Add `include_router()` in `app/api/v1/api.py`
 3. Generate and apply the migration:
    ```bash
-   cd backend
+   cd recon-backend
    uv run alembic revision --autogenerate -m "add <name> tables"
    uv run alembic upgrade head
    ```
@@ -181,7 +183,7 @@ async def lock_zone(user: User = Depends(require_roles(ROLE_ADMIN))):
 - Alembic only picks up models that are imported in `app/models/__init__.py`
 
 ```bash
-cd backend
+cd recon-backend
 uv run alembic revision --autogenerate -m "short description of change"
 uv run alembic upgrade head
 ```

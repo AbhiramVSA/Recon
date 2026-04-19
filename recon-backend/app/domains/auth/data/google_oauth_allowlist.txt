@@ -1,0 +1,4 @@
+# Replace these placeholders or point GOOGLE_OAUTH_ALLOWLIST_PATH
+# at your own allowlist file before using Google OAuth.
+maintainer@example.com
+ops@example.com

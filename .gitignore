@@ -1,6 +1,10 @@
 # Python-generated files
 __pycache__/
+.pytest_cache/
 *.py[oc]
+.coverage
+.mypy_cache/
+.ruff_cache/
 build/
 dist/
 wheels/
@@ -8,11 +12,27 @@ wheels/
 
 # Virtual environments
 .venv
+.venv/
 .env
+.env.*
 .env.deploy
 .env.local
+recon-backend/.env
+recon-backend/.venv/
 # Directories
 AGENT
+.idea/
+.vscode/
+recon-frontend/node_modules/
+recon-frontend/dist/
+recon-frontend/coverage/
+recon-frontend/playwright-report/
+recon-frontend/test-results/
+tree-maker/
+test-verify/
+*.log
+*.swp
+.DS_Store
 
 #local redis data
 dump.rdb
