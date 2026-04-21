@@ -18,12 +18,17 @@ export interface BackendShopItem {
 export interface BackendRedemption {
     id: string;
     participant_id: string;
+    participant_display_name?: string | null;
+    participant_email?: string | null;
+    participant_username?: string | null;
     item_id: string;
     item_name: string;
     point_cost: number;
     redeemed_at: string;
     fulfilled_at?: string | null;
     fulfillment_notes?: string | null;
+    returned_at?: string | null;
+    return_notes?: string | null;
     created_at: string;
 }
 
@@ -61,5 +66,9 @@ export async function redeemShopItem(itemId: string, idempotencyKey?: string) {
             idempotency_key: idempotencyKey ?? globalThis.crypto?.randomUUID?.() ?? `redeem-${Date.now()}`,
         },
     });
+}
+
+export async function fetchMyRedemptions() {
+    return apiFetch<BackendRedemption[]>('/api/v1/shop/me/redemptions');
 }
 

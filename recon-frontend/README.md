@@ -1,60 +1,87 @@
-# Recon Frontend
+# Recon
 
-Recon Frontend is a React + Vite client for the Recon platform. It includes the public event experience plus portal and admin-facing screens backed by the API.
+Recon is a Vite + React + TypeScript web app for the RECON 2026 cybersecurity event experience.
+
+It ships a stylized, animated landing page with section-based content for hero, events, schedule, team, prizes, and footer modules.
 
 ## Features
 
-- React 19 + TypeScript 6 application
-- Shared API client integration with the backend
-- Public event pages alongside portal/admin views
-- Tailwind CSS v4 styling
-- Vitest and Playwright test setup
+- Single-page event site with modular React components
+- Animated UI and motion effects via Framer Motion
+- Data-driven content in a central source file
+- Utility-first styling with Tailwind CSS (v4)
+- Fast dev/build workflow using Vite
 
-## Prerequisites
+## Tech Stack
 
-- Node.js 22.x
+- React 19
+- TypeScript 6
+- Vite 8
+- Tailwind CSS 4
+- Framer Motion
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
 - npm 9+
 
-## Setup
+### Install
 
 ```bash
-cd recon-frontend
-cp .env.example .env
 npm install
 ```
 
-Default local configuration:
-
-```dotenv
-VITE_API_BASE_URL=http://localhost:8000/api/v1
-VITE_SITE_URL=http://localhost:5173
-VITE_PORTAL_DEV_BYPASS_AUTH=0
-```
-
-## Run
+### Run in Development
 
 ```bash
 npm run dev
 ```
 
-By default, Vite serves the app at `http://localhost:5173`.
+By default, Vite serves the app at <http://localhost:5173>.
 
 ## Scripts
 
-- `npm run dev` starts the development server
-- `npm run build` builds the production bundle
-- `npm run test` runs Vitest
-- `npm run preview` previews the production bundle
-- `npm run test:e2e` runs Playwright
+- `npm run dev` - start development server
+- `npm run build` - type-check and build for production
+- `npm run preview` - preview the production build locally
 
-## Project structure
+## Project Structure
 
 ```text
 src/
-  api/               Backend API client code
-  components/        Shared UI sections/components
-  portal/            Portal and admin routes
-  lib/               Frontend utilities
-  data.ts            Static event content
-  main.tsx           App entry point
+  App.tsx              # Main page composition
+  data.ts              # Event content (stats, events, schedule, team, partners)
+  hooks.ts             # Shared hooks
+  shader.ts            # Shader/background related logic
+  index.css            # Global styles
+  main.tsx             # App entry point
+  components/
+    Hero.tsx
+    About.tsx
+    Events.tsx
+    Schedule.tsx
+    Team.tsx
+    Prizes.tsx
+    Footer.tsx
+    ...
 ```
+
+## Content Updates
+
+- Update event copy, stats, schedule, team, and partner data in `src/data.ts`.
+- Update visuals and section behavior in `src/components/*`.
+- Adjust global style tokens/effects in `src/index.css`.
+
+## Build for Production
+
+```bash
+npm run build
+```
+
+The optimized output is generated in the `dist/` folder.
+
+## Notes
+
+No explicit license is currently defined in `package.json`.

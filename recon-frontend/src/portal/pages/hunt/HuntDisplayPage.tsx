@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getFinishers, getLeaderboard } from '../../api/treasureHunt';
+import { getDisplayedHuntProblemCount } from '../../lib/huntMeta';
 import type { TreasureHuntLeaderboardEntryRead, TreasureHuntLeaderboardRead } from '../../lib/treasureHuntTypes';
 import PortalPage from '../../components/PortalPage';
 import { SectionLabel } from '../../components/primitives';
@@ -69,6 +70,7 @@ export default function HuntDisplayPage() {
                     <div className="space-y-2">
                         {(leaderboard?.entries ?? []).slice(0, 15).map((entry) => {
                             const isMine = myTeamId != null && entry.team_id === myTeamId;
+                            const totalProblems = getDisplayedHuntProblemCount(null, entry.total_problems);
                             return (
                                 <div
                                     key={entry.team_id}
@@ -83,7 +85,7 @@ export default function HuntDisplayPage() {
                                         {entry.team_name}
                                     </span>
                                     <span className="font-portal-mono text-[clamp(12px,2vw,16px)] text-[color-mix(in_srgb,var(--dim)_75%,white_10%)] shrink-0">
-                                        {entry.solved_count}/{entry.total_problems}
+                                        {entry.solved_count}/{totalProblems}
                                     </span>
                                 </div>
                             );

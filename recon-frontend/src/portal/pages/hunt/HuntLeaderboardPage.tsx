@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getLeaderboard } from '../../api/treasureHunt';
 import { ApiError } from '../../api/client';
 import { getApiErrorMessage } from '../../lib/apiErrorMessage';
+import { getDisplayedHuntProblemCount } from '../../lib/huntMeta';
 import type { TreasureHuntLeaderboardEntryRead, TreasureHuntLeaderboardRead } from '../../lib/treasureHuntTypes';
 import PortalPage from '../../components/PortalPage';
 import { GhostButton, PortalCard, SectionLabel } from '../../components/primitives';
@@ -122,6 +123,7 @@ export default function HuntLeaderboardPage() {
                                 const isMine = myTeamId != null && entry.team_id === myTeamId;
                                 const completed = entry.completed_at != null;
                                 const fl = finisherLabel(entry.finish_rank);
+                                const totalProblems = getDisplayedHuntProblemCount(null, entry.total_problems);
                                 return (
                                     <li
                                         key={entry.team_id}
@@ -144,7 +146,7 @@ export default function HuntLeaderboardPage() {
                                                 ) : null}
                                             </div>
                                             <div className="mt-1 font-portal-mono text-[10px] text-[color-mix(in_srgb,var(--dim)_78%,white_6%)]">
-                                                {entry.solved_count} / {entry.total_problems} solved
+                                                {entry.solved_count} / {totalProblems} solved
                                                 {completed ? ' · Finished' : ''}
                                             </div>
                                         </div>

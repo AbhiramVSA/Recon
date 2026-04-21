@@ -19,6 +19,9 @@ type ShopItemRow = {
 type RedemptionRow = {
     id: string;
     participant_id: string;
+    participant_display_name?: string | null;
+    participant_email?: string | null;
+    participant_username?: string | null;
     item_id: string;
     item_name: string;
     point_cost: number;
@@ -38,8 +41,10 @@ export default function AdminShopPage() {
     const [items, setItems] = useState<ShopItemRow[]>([]);
     const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [savingItem, setSavingItem] = useState(false);
+    const [actingRedemptionId, setActingRedemptionId] = useState<string | null>(null);
     const [selectedItemId, setSelectedItemId] = useState('');
-    const [redemptionFilter, setRedemptionFilter] = useState<'all' | 'fulfilled' | 'returned' | 'pending'>('all');
+    const [redemptionFilter, setRedemptionFilter] = useState<'all' | 'fulfilled' | 'returned' | 'pending'>('pending');
 
     const [itemName, setItemName] = useState('');
     const [itemDescription, setItemDescription] = useState('');
@@ -96,27 +101,61 @@ export default function AdminShopPage() {
         void load();
     }, [load]);
 
+    const sortedRedemptions = useMemo(
+        () =>
+            [...redemptions].sort(
+                (a, b) => new Date(b.redeemed_at).getTime() - new Date(a.redeemed_at).getTime(),
+            ),
+        [redemptions],
+    );
+
     const filteredRedemptions = useMemo(() => {
-        if (redemptionFilter === 'all') return redemptions;
+        if (redemptionFilter === 'all') return sortedRedemptions;
         if (redemptionFilter === 'fulfilled') {
-            return redemptions.filter((row) => Boolean(row.fulfilled_at) && !row.returned_at);
+            return sortedRedemptions.filter((row) => Boolean(row.fulfilled_at) && !row.returned_at);
         }
         if (redemptionFilter === 'returned') {
-            return redemptions.filter((row) => Boolean(row.returned_at));
+            return sortedRedemptions.filter((row) => Boolean(row.returned_at));
         }
-        return redemptions.filter((row) => !row.fulfilled_at && !row.returned_at);
-    }, [redemptionFilter, redemptions]);
+        return sortedRedemptions.filter((row) => !row.fulfilled_at && !row.returned_at);
+    }, [redemptionFilter, sortedRedemptions]);
 
-    const buildBaseItemPayload = () => ({
-        name: itemName.trim(),
-        description: itemDescription.trim(),
-        point_cost: Number(itemPointCost),
-        stock: itemStock.trim() === '' ? null : Number(itemStock),
-        photo_key: itemPhotoKey.trim() || null,
-    });
+    const pendingRedemptionsCount = useMemo(
+        () => redemptions.filter((row) => !row.fulfilled_at && !row.returned_at).length,
+        [redemptions],
+    );
+
+    const buildBaseItemPayload = () => {
+        const name = itemName.trim();
+        const description = itemDescription.trim();
+        const pointCost = Number(itemPointCost);
+        const stock = itemStock.trim() === '' ? null : Number(itemStock);
+
+        if (!name) {
+            throw new Error('Item name is required.');
+        }
+        if (!description) {
+            throw new Error('Item description is required.');
+        }
+        if (!Number.isFinite(pointCost) || pointCost < 1 || !Number.isInteger(pointCost)) {
+            throw new Error('Point cost must be a whole number >= 1.');
+        }
+        if (stock != null && (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock))) {
+            throw new Error('Stock must be a whole number >= 0, or blank for unlimited.');
+        }
+
+        return {
+            name,
+            description,
+            point_cost: pointCost,
+            stock,
+            photo_key: itemPhotoKey.trim() || null,
+        };
+    };
 
     const onCreate = async (event: React.FormEvent) => {
         event.preventDefault();
+        setSavingItem(true);
         try {
             const created = await shopApi.create(buildBaseItemPayload()) as ShopItemRow;
             addToast({ type: 'success', title: 'ITEM CREATED', body: created.name });
@@ -124,12 +163,15 @@ export default function AdminShopPage() {
             hydrateItem(created);
         } catch (err) {
             addToast({ type: 'error', title: 'CREATE FAILED', body: getApiErrorMessage(err, 'Could not create item.') });
+        } finally {
+            setSavingItem(false);
         }
     };
 
     const onUpdate = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!selectedItemId) return;
+        setSavingItem(true);
         try {
             const updated = await shopApi.update(selectedItemId, {
                 ...buildBaseItemPayload(),
@@ -140,20 +182,26 @@ export default function AdminShopPage() {
             hydrateItem(updated);
         } catch (err) {
             addToast({ type: 'error', title: 'UPDATE FAILED', body: getApiErrorMessage(err, 'Could not update item.') });
+        } finally {
+            setSavingItem(false);
         }
     };
 
     const onFulfill = async (redemptionId: string) => {
+        setActingRedemptionId(redemptionId);
         try {
             await shopApi.fulfill(redemptionId, { fulfillment_notes: fulfillmentNotes.trim() || null });
             addToast({ type: 'success', title: 'REDEMPTION FULFILLED', body: redemptionId });
             await load();
         } catch (err) {
             addToast({ type: 'error', title: 'FULFILL FAILED', body: getApiErrorMessage(err, 'Could not fulfill redemption.') });
+        } finally {
+            setActingRedemptionId(null);
         }
     };
 
     const onReturn = async (redemptionId: string) => {
+        setActingRedemptionId(redemptionId);
         try {
             await shopApi.returnRedemption(redemptionId, {
                 idempotency_key: makeIdempotencyKey('shop-return'),
@@ -163,6 +211,8 @@ export default function AdminShopPage() {
             await load();
         } catch (err) {
             addToast({ type: 'error', title: 'RETURN FAILED', body: getApiErrorMessage(err, 'Could not return redemption.') });
+        } finally {
+            setActingRedemptionId(null);
         }
     };
 
@@ -181,6 +231,11 @@ export default function AdminShopPage() {
                     </GhostButton>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
+                    {!loading && items.length === 0 && (
+                        <div className="border border-[var(--border-dim)] px-4 py-4 font-portal-body text-[13px] text-[var(--dim)] lg:col-span-2">
+                            No catalog items found. Create the first item below.
+                        </div>
+                    )}
                     {items.map((item) => (
                         <button
                             key={item.id}
@@ -252,11 +307,16 @@ export default function AdminShopPage() {
                         item is active
                     </label>
                     <div className="flex flex-wrap gap-2">
-                        <PrimaryButton type="submit" className="!w-auto min-h-10 px-6">
+                        <PrimaryButton type="submit" className="!w-auto min-h-10 px-6" disabled={savingItem}>
                             {selectedItemId ? 'SAVE ITEM' : 'CREATE ITEM'}
                         </PrimaryButton>
                         {selectedItemId && (
-                            <GhostButton type="button" className="!w-auto min-h-10 px-6" onClick={() => hydrateItem(null)}>
+                            <GhostButton
+                                type="button"
+                                className="!w-auto min-h-10 px-6"
+                                onClick={() => hydrateItem(null)}
+                                disabled={savingItem}
+                            >
                                 RESET FORM
                             </GhostButton>
                         )}
@@ -267,7 +327,9 @@ export default function AdminShopPage() {
             <PortalCard className="p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <span className="font-portal-mono text-[10px] tracking-[0.2em] uppercase text-[var(--amber)]">
-                        REDEMPTIONS ({filteredRedemptions.length})
+                        {redemptionFilter === 'pending'
+                            ? `AWAITING COLLECTION (${filteredRedemptions.length})`
+                            : `REDEMPTIONS (${filteredRedemptions.length})`}
                     </span>
                     <select
                         value={redemptionFilter}
@@ -279,6 +341,9 @@ export default function AdminShopPage() {
                         <option value="fulfilled">fulfilled</option>
                         <option value="returned">returned</option>
                     </select>
+                </div>
+                <div className="font-portal-mono text-[10px] text-[var(--dim)] mb-4">
+                    pending total: {pendingRedemptionsCount}
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2 mb-4">
@@ -297,6 +362,11 @@ export default function AdminShopPage() {
                 </div>
 
                 <div className="max-h-96 overflow-auto space-y-3">
+                    {filteredRedemptions.length === 0 && (
+                        <div className="border border-[var(--border-dim)] px-4 py-4 font-portal-body text-[13px] text-[var(--dim)]">
+                            No redemptions match this filter.
+                        </div>
+                    )}
                     {filteredRedemptions.map((row) => (
                         <div key={row.id} className="border border-[var(--border-dim)] px-4 py-4">
                             <div className="flex flex-wrap items-center gap-2">
@@ -309,25 +379,39 @@ export default function AdminShopPage() {
                                     <StatusPill label="pending" tone="amber" />
                                 )}
                             </div>
-                            <div className="font-portal-mono text-[10px] text-[var(--dim)] mt-2">
-                                participant {row.participant_id} · {row.point_cost} pts
+                            <div className="font-portal-mono text-[10px] text-[var(--dim)] mt-2 leading-relaxed">
+                                buyer {row.participant_display_name ?? row.participant_username ?? row.participant_id}
+                                {row.participant_email ? ` · ${row.participant_email}` : ''}
                             </div>
+                            <div className="font-portal-mono text-[10px] text-[var(--dim)] mt-1 leading-relaxed">
+                                redemption {row.id} · {row.point_cost} pts · redeemed {new Date(row.redeemed_at).toLocaleString()}
+                            </div>
+                            {row.fulfillment_notes ? (
+                                <div className="font-portal-mono text-[10px] text-[var(--dim)] mt-1 leading-relaxed">
+                                    fulfill note: {row.fulfillment_notes}
+                                </div>
+                            ) : null}
+                            {row.return_notes ? (
+                                <div className="font-portal-mono text-[10px] text-[var(--dim)] mt-1 leading-relaxed">
+                                    return note: {row.return_notes}
+                                </div>
+                            ) : null}
                             <div className="flex flex-wrap gap-2 mt-3">
                                 <GhostButton
                                     type="button"
                                     className="!w-auto min-h-9 px-4"
                                     onClick={() => void onFulfill(row.id)}
-                                    disabled={Boolean(row.fulfilled_at) || Boolean(row.returned_at)}
+                                    disabled={Boolean(row.fulfilled_at) || Boolean(row.returned_at) || actingRedemptionId === row.id}
                                 >
-                                    FULFILL
+                                    {actingRedemptionId === row.id ? 'PROCESSING...' : 'FULFILL'}
                                 </GhostButton>
                                 <GhostButton
                                     type="button"
                                     className="!w-auto min-h-9 px-4 border-[var(--portal-red)] text-[var(--portal-red)]"
                                     onClick={() => void onReturn(row.id)}
-                                    disabled={Boolean(row.returned_at)}
+                                    disabled={Boolean(row.returned_at) || actingRedemptionId === row.id}
                                 >
-                                    RETURN
+                                    {actingRedemptionId === row.id ? 'PROCESSING...' : 'RETURN'}
                                 </GhostButton>
                             </div>
                         </div>

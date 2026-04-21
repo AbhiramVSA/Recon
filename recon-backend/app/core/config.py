@@ -36,7 +36,7 @@ def _validate_google_oauth_allowlist_file(path_value: Path | str) -> Path:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=(".env", "../.env"),   # Resolves whether the app runs from recon-backend/ or the repo root
+        env_file=(".env", "../.env"),   # Resolves regardless of if uvicorn is run from root or backend/
         env_file_encoding="utf-8",
         extra="ignore",
         enable_decoding=False,
@@ -78,7 +78,25 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    BOOTSTRAP_ADMIN_EMAILS: list[str] = []
+    BOOTSTRAP_ADMIN_EMAILS: list[str] = [
+        "nrikhil@gmail.com",
+        "recon2k26@gmail.com",
+        "abhiram.shivam@gmail.com",
+        "abhiramvsa7@gmail.com",
+        "tanishq.23bce9134@vitapstudent.ac.in",
+        "abhiram.23bce8643@vitapstudent.ac.in",
+        "rikhil.23bec7030@vitapstudent.ac.in",
+        "ryan.24bce7117@vitapstudent.ac.in",
+        "sonali.23bce7038@vitapstudent.ac.in",
+        "anant.kavuru@gmail.com",
+        "samradh1515@gmail.com",
+        "raza.24bca7544@vitapstudent.ac.in",
+        "chanu.23bce20115@vitapstudent.ac.in",
+        "rishwith.24bes7048@vitapstudent.ac.in",
+        "prabhath.24bcb7063@vitapstudent.ac.in",
+        "abhiram.23bce20342@vitapstudent.ac.in",
+        "nikhil.23bce7496@vitapstudent.ac.in",
+    ]
 
     # ── Database ──────────────────────────────────────────────
     DATABASE_USER: str = "postgres"

@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /hunt/r/
+Disallow: /hunt/problem/
+Disallow: /hunt/scan
 
 Sitemap: /sitemap.xml

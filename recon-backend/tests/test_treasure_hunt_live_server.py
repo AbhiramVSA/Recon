@@ -27,8 +27,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 FLAG_BY_SLUG = {
-    "shifted-ssid": "RECON{CAESAR_OVER_COFFEE}",
-    "badge-b64": "RECON{B64_BADGE_BINGO}",
+    "dancing-men": "ELEMENTARY MY DEAR WATSON",
+    "unown-pokemon-alphabet": "THE DARK KNIGHT ALWAYS RISES",
 }
 
 
@@ -156,14 +156,14 @@ async def test_live_treasure_hunt_team_scan_submit_and_progress(
         created_team = await live_client.post(f"{API_PREFIX}/teams/", json={"name": f"Live Hunt {suffix}"})
         assert created_team.status_code == 201
 
-        scanned = await live_client.get(f"{API_PREFIX}/treasure-hunt/scan/th-01-shifted-ssid")
+        scanned = await live_client.get(f"{API_PREFIX}/treasure-hunt/scan/th-01-dancing-men")
         assert scanned.status_code == 200
-        assert scanned.json()["slug"] == "shifted-ssid"
+        assert scanned.json()["slug"] == "dancing-men"
 
-        problem_id = await _get_problem_id(db_session_factory, slug="shifted-ssid")
+        problem_id = await _get_problem_id(db_session_factory, slug="dancing-men")
         solved = await live_client.post(
             f"{API_PREFIX}/treasure-hunt/problems/{problem_id}/submit",
-            json={"flag": FLAG_BY_SLUG["shifted-ssid"], "idempotency_key": f"live-hunt-solve-{suffix}"},
+            json={"flag": FLAG_BY_SLUG["dancing-men"], "idempotency_key": f"live-hunt-solve-{suffix}"},
         )
         assert solved.status_code == 200
         assert solved.json()["status"] == "solved"
@@ -171,7 +171,7 @@ async def test_live_treasure_hunt_team_scan_submit_and_progress(
         progress = await live_client.get(f"{API_PREFIX}/treasure-hunt/me/progress")
         assert progress.status_code == 200
         assert progress.json()["solved_count"] >= 1
-        assert any(item["slug"] == "shifted-ssid" and item["solved"] for item in progress.json()["problems"])
+        assert any(item["slug"] == "dancing-men" and item["solved"] for item in progress.json()["problems"])
     finally:
         await _cleanup_user_graph(db_session_factory, user_id=user.id)
 
@@ -189,17 +189,17 @@ async def test_live_treasure_hunt_idempotency_conflict_between_problems(
         team = await live_client.post(f"{API_PREFIX}/teams/", json={"name": f"Live Hunt Conflict {suffix}"})
         assert team.status_code == 201
 
-        first_problem_id = await _get_problem_id(db_session_factory, slug="shifted-ssid")
-        second_problem_id = await _get_problem_id(db_session_factory, slug="badge-b64")
+        first_problem_id = await _get_problem_id(db_session_factory, slug="dancing-men")
+        second_problem_id = await _get_problem_id(db_session_factory, slug="unown-pokemon-alphabet")
         idem = f"live-hunt-idem-{suffix}"
 
         first = await live_client.post(
             f"{API_PREFIX}/treasure-hunt/problems/{first_problem_id}/submit",
-            json={"flag": FLAG_BY_SLUG["shifted-ssid"], "idempotency_key": idem},
+            json={"flag": FLAG_BY_SLUG["dancing-men"], "idempotency_key": idem},
         )
         second = await live_client.post(
             f"{API_PREFIX}/treasure-hunt/problems/{second_problem_id}/submit",
-            json={"flag": FLAG_BY_SLUG["badge-b64"], "idempotency_key": idem},
+            json={"flag": FLAG_BY_SLUG["unown-pokemon-alphabet"], "idempotency_key": idem},
         )
 
         assert first.status_code == 200

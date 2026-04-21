@@ -15,6 +15,7 @@ from app.domains.treasure_hunt.service import (
     get_leaderboard,
     get_my_progress,
     reveal_problem,
+    reveal_problem_by_route_hash,
     submit_flag,
 )
 
@@ -23,6 +24,12 @@ async def scan_problem(
     db: AsyncSession, *, user: User, qr_token: str
 ) -> TreasureHuntProblemRead:
     return await reveal_problem(db, user=user, qr_token=qr_token)
+
+
+async def scan_problem_by_route_hash(
+    db: AsyncSession, *, user: User, route_hash: str
+) -> TreasureHuntProblemRead:
+    return await reveal_problem_by_route_hash(db, user=user, route_hash=route_hash)
 
 
 async def submit_problem_flag(

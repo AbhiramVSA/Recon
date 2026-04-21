@@ -10,6 +10,7 @@ from app.domains.treasure_hunt.controller import (
     leaderboard,
     my_progress,
     scan_problem,
+    scan_problem_by_route_hash,
     submit_problem_flag,
 )
 from app.domains.treasure_hunt.schemas import (
@@ -31,6 +32,15 @@ async def scan_problem_route(
     user: User = Depends(require_roles(ROLE_PARTICIPANT)),
 ):
     return await scan_problem(db, user=user, qr_token=qr_token)
+
+
+@router.get("/scan/routes/{route_hash}", response_model=TreasureHuntProblemRead)
+async def scan_problem_by_route_hash_route(
+    route_hash: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(ROLE_PARTICIPANT)),
+):
+    return await scan_problem_by_route_hash(db, user=user, route_hash=route_hash)
 
 
 @router.post("/problems/{problem_id}/submit", response_model=TreasureHuntFlagSubmitRead)

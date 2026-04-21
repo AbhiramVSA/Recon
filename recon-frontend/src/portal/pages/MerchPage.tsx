@@ -1,14 +1,15 @@
 import { Gift, Trophy, Zap } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import PortalPage from '../components/PortalPage';
 import PortalModal from '../components/PortalModal';
-import { GhostButton, PortalCard, PrimaryButton, SectionLabel, ZoneTag } from '../components/primitives';
+import { GhostButton, PortalCard, PrimaryButton, SectionLabel, StatusPill, ZoneTag } from '../components/primitives';
 import { MERCH_ITEMS } from '../lib/data';
 import { useAuthStore } from '../stores/authStore';
 import { useToastStore } from '../stores/toastStore';
-import { fetchShopItems, redeemShopItem } from '../api/shop';
+import { fetchMyRedemptions, fetchShopItems, redeemShopItem } from '../api/shop';
 import type { BackendRedemption, BackendShopItem } from '../api/shop';
 import { ApiError } from '../api/client';
+import { participantsApi } from '../../api/backend';
 
 type RedeemStage = 'confirm' | 'loading' | 'success';
 type CatalogSource = 'backend' | 'preview';
@@ -85,18 +86,52 @@ export default function MerchPage() {
     const [redeemStage, setRedeemStage] = useState<RedeemStage>('confirm');
     const [redeemResult, setRedeemResult] = useState<BackendRedemption | null>(null);
     const [items, setItems] = useState<BackendShopItem[]>([]);
+    const [myRedemptions, setMyRedemptions] = useState<BackendRedemption[]>([]);
     const [catalogSource, setCatalogSource] = useState<CatalogSource>('backend');
     const [loading, setLoading] = useState(true);
+    const [currentPoints, setCurrentPoints] = useState(Number(participant?.points ?? 0));
 
     const selected = selectedId ? items.find((item) => item.id === selectedId) ?? null : null;
-    const points = participant?.points ?? 0;
+    const points = Number.isFinite(currentPoints) ? currentPoints : 0;
 
     const canAfford = (cost: number) => points >= cost;
+
+    const applyPoints = useCallback((nextPoints: number) => {
+        const normalized = Number.isFinite(nextPoints) ? Math.max(0, Math.trunc(nextPoints)) : 0;
+        setCurrentPoints(normalized);
+        useAuthStore.setState((state) => ({
+            participant: state.participant ? { ...state.participant, points: normalized } : state.participant,
+        }));
+    }, []);
 
     const balancePreview = useMemo(() => {
         if (!selected) return points;
         return Math.max(0, points - selected.point_cost);
     }, [points, selected]);
+
+    const sortedRedemptions = useMemo(
+        () => [...myRedemptions].sort((a, b) => new Date(b.redeemed_at).getTime() - new Date(a.redeemed_at).getTime()),
+        [myRedemptions],
+    );
+
+    const refreshParticipantShopState = useCallback(async () => {
+        const [historyResult, dashboardResult] = await Promise.allSettled([
+            fetchMyRedemptions(),
+            participantsApi.myDashboard() as Promise<{ pointsBalance?: number }>,
+        ]);
+
+        if (historyResult.status === 'fulfilled') {
+            setMyRedemptions(Array.isArray(historyResult.value) ? historyResult.value : []);
+        }
+
+        if (dashboardResult.status === 'fulfilled') {
+            applyPoints(Number(dashboardResult.value?.pointsBalance ?? 0));
+        }
+    }, [applyPoints]);
+
+    useEffect(() => {
+        applyPoints(Number(participant?.points ?? 0));
+    }, [applyPoints, participant?.points]);
 
     useEffect(() => {
         let alive = true;
@@ -111,6 +146,15 @@ export default function MerchPage() {
                 if (activeItems.length > 0) {
                     setItems(activeItems);
                     setCatalogSource('backend');
+                    try {
+                        await refreshParticipantShopState();
+                    } catch {
+                        addToast({
+                            type: 'warning',
+                            title: 'HISTORY NOT AVAILABLE',
+                            body: 'Could not load redemption history right now.',
+                        });
+                    }
                 } else {
                     setItems(buildPreviewCatalog());
                     setCatalogSource('preview');
@@ -137,7 +181,7 @@ export default function MerchPage() {
         return () => {
             alive = false;
         };
-    }, [addToast]);
+    }, [addToast, refreshParticipantShopState]);
 
     const onConfirmRedeem = async () => {
         if (!selected) return;
@@ -154,6 +198,15 @@ export default function MerchPage() {
             const redeemed = await redeemShopItem(selected.id);
             setRedeemResult(redeemed);
             setRedeemStage('success');
+            await refreshParticipantShopState();
+            setItems((previousItems) =>
+                previousItems.map((item) => {
+                    if (item.id !== selected.id) return item;
+                    const remaining = item.remaining_stock;
+                    if (remaining == null) return item;
+                    return { ...item, remaining_stock: Math.max(0, remaining - 1) };
+                }),
+            );
             addToast({
                 type: 'success',
                 title: 'REDEMPTION CONFIRMED',
@@ -326,6 +379,63 @@ export default function MerchPage() {
                 })}
             </div>
 
+            <PortalCard className="px-4 py-4 mt-8" attr>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                    <SectionLabel>-- MY REDEMPTIONS --</SectionLabel>
+                    <GhostButton
+                        type="button"
+                        className="!w-auto min-h-9 px-4"
+                        onClick={() => {
+                            void refreshParticipantShopState();
+                        }}
+                    >
+                        REFRESH
+                    </GhostButton>
+                </div>
+
+                {sortedRedemptions.length === 0 ? (
+                    <div className="font-portal-mono text-[10px] tracking-[0.1em] uppercase text-[color-mix(in_srgb,var(--dim)_72%,white_8%)]">
+                        No redemptions yet.
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {sortedRedemptions.map((row) => {
+                            const status = row.returned_at
+                                ? { label: 'RETURNED', tone: 'red' as const }
+                                : row.fulfilled_at
+                                  ? { label: 'PROVIDED', tone: 'green' as const }
+                                  : { label: 'PENDING PICKUP', tone: 'amber' as const };
+                            return (
+                                <div key={row.id} className="border border-[var(--border-dim)] px-4 py-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <div className="font-portal-mono text-[11px] tracking-[0.08em] uppercase text-[var(--fg)]">
+                                            {row.item_name}
+                                        </div>
+                                        <StatusPill label={status.label} tone={status.tone} />
+                                    </div>
+                                    <div className="font-portal-mono text-[10px] tracking-[0.08em] text-[color-mix(in_srgb,var(--dim)_72%,white_8%)] mt-2">
+                                        ID {row.id}
+                                    </div>
+                                    <div className="font-portal-mono text-[10px] tracking-[0.08em] text-[color-mix(in_srgb,var(--dim)_72%,white_8%)] mt-1 uppercase">
+                                        {row.point_cost} pts · redeemed {new Date(row.redeemed_at).toLocaleString()}
+                                    </div>
+                                    {row.fulfilled_at ? (
+                                        <div className="font-portal-mono text-[10px] tracking-[0.08em] text-[color-mix(in_srgb,var(--dim)_72%,white_8%)] mt-1 uppercase">
+                                            provided {new Date(row.fulfilled_at).toLocaleString()}
+                                        </div>
+                                    ) : null}
+                                    {row.fulfillment_notes ? (
+                                        <div className="font-portal-mono text-[10px] tracking-[0.08em] text-[color-mix(in_srgb,var(--dim)_72%,white_8%)] mt-1">
+                                            Note: {row.fulfillment_notes}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </PortalCard>
+
             <PortalModal
                 open={Boolean(selected)}
                 title="CONFIRM REDEMPTION"
@@ -382,12 +492,20 @@ export default function MerchPage() {
                                     className="mt-4 min-h-11 px-4 border border-[var(--border)] font-portal-mono text-[10px] tracking-[0.12em] uppercase text-[var(--amber)]"
                                     onClick={async () => {
                                         if (!redeemResult) return;
-                                        await navigator.clipboard.writeText(redeemResult.id);
-                                        addToast({
-                                            type: 'info',
-                                            title: 'CODE COPIED',
-                                            body: `Redemption id copied to clipboard.`,
-                                        });
+                                        try {
+                                            await navigator.clipboard.writeText(redeemResult.id);
+                                            addToast({
+                                                type: 'info',
+                                                title: 'CODE COPIED',
+                                                body: 'Redemption id copied to clipboard.',
+                                            });
+                                        } catch {
+                                            addToast({
+                                                type: 'warning',
+                                                title: 'COPY FAILED',
+                                                body: 'Could not copy redemption id. Copy it manually.',
+                                            });
+                                        }
                                     }}
                                 >
                                     COPY ID

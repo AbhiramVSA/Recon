@@ -121,6 +121,7 @@ export default function App() {
                             <Route path="/hunt" element={<HuntHomePage />} />
                             <Route path="/hunt/team" element={<HuntTeamPage />} />
                             <Route path="/hunt/scan" element={<HuntScanPage />} />
+                            <Route path="/hunt/r/:routeHash" element={<HuntProblemPage />} />
                             <Route path="/hunt/problem/:problemId" element={<HuntProblemPage />} />
                             <Route path="/hunt/progress" element={<HuntProgressPage />} />
                             <Route path="/hunt/leaderboard" element={<HuntLeaderboardPage />} />

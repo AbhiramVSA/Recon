@@ -268,6 +268,69 @@ async def test_admin_fulfills_redemption(client, auth_override, create_user, ses
 
 
 @pytest.mark.asyncio
+async def test_fulfilled_redemption_is_removed_from_pending_and_cannot_be_fulfilled_twice(
+    client, auth_override, create_user, session_factory
+):
+    admin = await create_user(role_name=ROLE_ADMIN, email="shopadmin-fulfillstate@example.com", username="shopadminfulfillstate")
+    participant_user = await create_user(email="awaitingpickup@example.com", username="awaitingpickup")
+
+    auth_override(participant_user)
+    profile_resp = await client.post(
+        "/api/v1/participants/me",
+        json={"display_name": "awaiting-pickup", "institution": "VIT-AP", "year": 2},
+    )
+    participant_id = uuid.UUID(profile_resp.json()["id"])
+
+    await _seed_points(session_factory, actor=admin, participant_id=participant_id, amount=300)
+
+    auth_override(admin)
+    create_resp = await client.post(
+        "/api/v1/shop/",
+        json={"name": "Desk Pickup Item", "description": "pickup", "point_cost": 80, "stock": 5},
+    )
+    item_id = create_resp.json()["id"]
+
+    auth_override(participant_user)
+    redeem_resp = await client.post(
+        f"/api/v1/shop/{item_id}/redeem",
+        json=_redeem_payload("redeem-awaiting-pickup-1"),
+    )
+    assert redeem_resp.status_code == 200
+    redemption_id = redeem_resp.json()["id"]
+
+    auth_override(admin)
+    pending_before = await client.get("/api/v1/shop/redemptions?fulfilled=false&returned=false")
+    assert pending_before.status_code == 200
+    assert [row["id"] for row in pending_before.json()] == [redemption_id]
+    assert pending_before.json()[0]["participant_display_name"] == "awaiting-pickup"
+    assert pending_before.json()[0]["participant_email"] == "awaitingpickup@example.com"
+
+    fulfill_resp = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/fulfill",
+        json={"fulfillment_notes": "collected at desk"},
+    )
+    assert fulfill_resp.status_code == 200
+    assert fulfill_resp.json()["fulfilled_at"] is not None
+    assert fulfill_resp.json()["fulfillment_notes"] == "collected at desk"
+
+    pending_after = await client.get("/api/v1/shop/redemptions?fulfilled=false&returned=false")
+    assert pending_after.status_code == 200
+    assert pending_after.json() == []
+
+    fulfilled_after = await client.get("/api/v1/shop/redemptions?fulfilled=true&returned=false")
+    assert fulfilled_after.status_code == 200
+    assert len(fulfilled_after.json()) == 1
+    assert fulfilled_after.json()[0]["id"] == redemption_id
+
+    second_fulfill = await client.patch(
+        f"/api/v1/shop/redemptions/{redemption_id}/fulfill",
+        json={"fulfillment_notes": "duplicate"},
+    )
+    assert second_fulfill.status_code == 409
+    assert second_fulfill.json()["detail"] == "Redemption is already fulfilled"
+
+
+@pytest.mark.asyncio
 async def test_admin_returns_redemption_refunds_points_and_restores_stock(
     client, auth_override, create_user, session_factory
 ):
@@ -627,6 +690,10 @@ async def test_admin_lists_redemptions_with_filter(client, auth_override, create
     all_resp = await client.get("/api/v1/shop/redemptions")
     assert all_resp.status_code == 200
     assert len(all_resp.json()) == 2
+    all_rows = all_resp.json()
+    assert all_rows[0]["participant_display_name"] == "serialredeemer"
+    assert all_rows[0]["participant_email"] == "redeemer@example.com"
+    assert all_rows[0]["participant_username"] == "redeemer"
 
     # Filter unfulfilled
     unfulfilled_resp = await client.get("/api/v1/shop/redemptions?fulfilled=false")

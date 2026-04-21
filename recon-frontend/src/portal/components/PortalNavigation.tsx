@@ -57,12 +57,19 @@ export default function PortalNavigation() {
             if (!menuRef.current || !target || menuRef.current.contains(target)) return;
             setMenuOpen(false);
         };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setMenuOpen(false);
+            }
+        };
 
         document.addEventListener('mousedown', onPointerDown);
         document.addEventListener('touchstart', onPointerDown, { passive: true });
+        document.addEventListener('keydown', onKeyDown);
         return () => {
             document.removeEventListener('mousedown', onPointerDown);
             document.removeEventListener('touchstart', onPointerDown);
+            document.removeEventListener('keydown', onKeyDown);
         };
     }, [menuOpen]);
 
@@ -154,12 +161,19 @@ export default function PortalNavigation() {
                                 onClick={() => setMenuOpen((value) => !value)}
                                 className="min-h-11 min-w-11 border border-[var(--border)] bg-[var(--surface)] text-[var(--amber)] font-portal-mono text-[11px] uppercase inline-flex items-center justify-center"
                                 aria-label="Open participant menu"
+                                aria-haspopup="menu"
+                                aria-expanded={menuOpen}
+                                aria-controls="participant-menu"
                             >
                                 {initial}
                             </button>
 
                             {menuOpen && (
-                                <div className="absolute right-0 mt-2 w-[min(15rem,calc(100vw-2rem))] portal-card p-3 bg-[var(--surface-2)] z-[120]">
+                                <div
+                                    id="participant-menu"
+                                    role="menu"
+                                    className="absolute right-0 mt-2 w-[min(15rem,calc(100vw-2rem))] portal-card p-3 bg-[var(--surface-2)] z-[120]"
+                                >
                                     <div className="font-portal-mono text-[10px] text-[var(--amber)] tracking-[0.18em] uppercase">
                                         {participant?.displayName ?? 'Participant'}
                                     </div>

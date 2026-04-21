@@ -18,9 +18,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-editable --compile-bytecode
 
 # Copy application source code
-COPY ./app /app/app/
-COPY ./alembic /app/alembic/
-COPY ./alembic.ini /app/
+COPY ./backend/app /app/app/
+COPY ./backend/alembic /app/alembic/
+COPY ./backend/alembic.ini /app/
 
 # Sync the project itself into the environment
 RUN --mount=type=cache,target=/root/.cache/uv \

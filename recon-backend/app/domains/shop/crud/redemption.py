@@ -5,6 +5,8 @@ from typing import Optional
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.domains.auth.models import User
+from app.domains.participants.models import Participant
 from app.domains.shop.models import Redemption
 
 
@@ -87,6 +89,41 @@ async def list_all_redemptions(
         query = query.where(Redemption.returned_at.is_(None))
     result = await db.exec(query)
     return list(result.all())
+
+
+async def list_all_redemptions_with_buyer_info(
+    db: AsyncSession, *, fulfilled: Optional[bool] = None, returned: Optional[bool] = None
+) -> list[tuple[Redemption, str | None, str | None, str | None]]:
+    query = (
+        select(
+            Redemption,
+            Participant.display_name,
+            User.email,
+            User.username,
+        )
+        .outerjoin(Participant, Participant.id == Redemption.participant_id)
+        .outerjoin(User, User.id == Participant.user_id)
+        .order_by(Redemption.redeemed_at.desc())
+    )
+    if fulfilled is True:
+        query = query.where(Redemption.fulfilled_at.is_not(None))
+    elif fulfilled is False:
+        query = query.where(Redemption.fulfilled_at.is_(None))
+    if returned is True:
+        query = query.where(Redemption.returned_at.is_not(None))
+    elif returned is False:
+        query = query.where(Redemption.returned_at.is_(None))
+
+    result = await db.exec(query)
+    return [
+        (
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+        )
+        for row in result.all()
+    ]
 
 
 async def fulfill_redemption(

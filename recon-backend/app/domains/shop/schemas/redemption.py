@@ -9,6 +9,9 @@ from sqlmodel import Field, SQLModel
 class RedemptionRead(SQLModel):
     id: uuid.UUID
     participant_id: uuid.UUID
+    participant_display_name: Optional[str] = None
+    participant_email: Optional[str] = None
+    participant_username: Optional[str] = None
     item_id: uuid.UUID
     item_name: str
     point_cost: int

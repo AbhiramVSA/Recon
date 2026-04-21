@@ -18,6 +18,7 @@ type RouteContext = {
     deletedAnnouncements: string[];
     createdShopItems: unknown[];
     updatedShopItems: unknown[];
+    redeemedRequests: string[];
     fulfilledRedemptions: string[];
     returnedRedemptions: string[];
     pointAwards: unknown[];
@@ -67,6 +68,7 @@ async function stubPortalApi(page: import('@playwright/test').Page, options?: {
         deletedAnnouncements: [],
         createdShopItems: [],
         updatedShopItems: [],
+        redeemedRequests: [],
         fulfilledRedemptions: [],
         returnedRedemptions: [],
         pointAwards: [],
@@ -177,6 +179,9 @@ async function stubPortalApi(page: import('@playwright/test').Page, options?: {
         {
             id: 'redemption-1',
             participant_id: 'participant-1',
+            participant_display_name: 'Ciphercat',
+            participant_email: 'ciphercat@example.com',
+            participant_username: 'ciphercat',
             item_id: 'shop-1',
             item_name: 'RECON Tee',
             point_cost: 2000,
@@ -956,6 +961,66 @@ async function stubPortalApi(page: import('@playwright/test').Page, options?: {
             });
         }
 
+        if (path.endsWith('/shop/me/redemptions') && method === 'GET') {
+            const mine = currentRedemptions.filter((row) => String(row.participant_id) === currentParticipantId);
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(mine),
+            });
+        }
+
+        if (path.includes('/shop/') && path.endsWith('/redeem') && method === 'POST') {
+            const itemId = path.split('/shop/')[1].split('/redeem')[0];
+            ctx.redeemedRequests.push(itemId);
+            const item = currentShopItems.find((row) => row.id === itemId);
+            if (!item) {
+                return route.fulfill({
+                    status: 404,
+                    contentType: 'application/json',
+                    body: JSON.stringify({ detail: 'Shop item not found' }),
+                });
+            }
+
+            const remaining = Number(item.remaining_stock ?? item.stock ?? 0);
+            if (remaining <= 0) {
+                return route.fulfill({
+                    status: 409,
+                    contentType: 'application/json',
+                    body: JSON.stringify({ detail: 'Item is out of stock' }),
+                });
+            }
+
+            currentShopItems = currentShopItems.map((row) => (
+                row.id === itemId
+                    ? { ...row, remaining_stock: Math.max(0, Number(row.remaining_stock ?? row.stock ?? 0) - 1) }
+                    : row
+            ));
+
+            const created = {
+                id: `redemption-${currentRedemptions.length + 1}`,
+                participant_id: currentParticipantId,
+                participant_display_name: currentParticipantName,
+                participant_email: 'ciphercat@example.com',
+                participant_username: 'ciphercat',
+                item_id: String(item.id),
+                item_name: String(item.name),
+                point_cost: Number(item.point_cost ?? 0),
+                redeemed_at: '2026-04-19T12:05:00Z',
+                fulfilled_at: null,
+                fulfillment_notes: null,
+                returned_at: null,
+                return_notes: null,
+            };
+            currentRedemptions = [created, ...currentRedemptions];
+            currentPointsBalance = Math.max(0, currentPointsBalance - Number(item.point_cost ?? 0));
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(created),
+            });
+        }
+
         if (path.endsWith('/shop') && method === 'POST') {
             const payload = request.postDataJSON() as Record<string, unknown>;
             ctx.createdShopItems.push(payload);
@@ -1280,8 +1345,95 @@ test('admin shop page updates items and processes fulfillment + returns', async 
     await page.getByRole('button', { name: 'FULFILL' }).click();
     await expect.poll(() => ctx.fulfilledRedemptions).toContain('redemption-1');
 
+    await page.locator('select').last().selectOption('all');
     await page.getByRole('button', { name: 'RETURN' }).click();
     await expect.poll(() => ctx.returnedRedemptions).toContain('redemption-1');
+});
+
+test('merch page redeem creates a pending pickup record for the participant', async ({ page }) => {
+    const profile = {
+        id: 'participant-1',
+        user_id: 'user-1',
+        display_name: 'Ciphercat',
+        institution: 'VIT-AP',
+        year: 2,
+        talent_visible: false,
+        talent_contact_shareable: false,
+        created_at: '2026-04-19T08:00:00Z',
+        can_edit: true,
+        is_self: true,
+    };
+    const ctx = await stubPortalApi(page, {
+        participantProfile: profile,
+        dashboard: {
+            displayName: 'Ciphercat',
+            registrationId: 'participant-1',
+            pointsBalance: 3200,
+            zonesCheckedInCount: 2,
+            checkedInZoneIds: ['zone-ctf'],
+            eventsRegisteredCount: 3,
+            leaderboardRank: 4,
+        },
+        redemptions: [],
+        shopItems: [
+            {
+                id: 'shop-1',
+                name: 'RECON Tee',
+                description: 'Operator edition',
+                point_cost: 2000,
+                stock: 20,
+                remaining_stock: 20,
+                is_active: true,
+                photo_key: '/merch/merch01.webp',
+            },
+        ],
+    });
+
+    await page.goto('/merch');
+    await page.getByRole('button', { name: 'REDEEM ->' }).first().click();
+    await page.getByRole('button', { name: 'CONFIRM REDEMPTION' }).click();
+
+    await expect.poll(() => ctx.redeemedRequests).toContain('shop-1');
+    await expect(page.getByRole('dialog').getByText('REDEMPTION CONFIRMED')).toBeVisible();
+    await expect(page.getByText('PENDING PICKUP')).toBeVisible();
+});
+
+test('admin shop awaiting collection list shows buyer and removes row after fulfill', async ({ page }) => {
+    const ctx = await stubPortalApi(page, {
+        participantProfile: null,
+        isAdmin: true,
+        redemptions: [
+            {
+                id: 'redemption-awaiting-1',
+                participant_id: 'participant-7',
+                participant_display_name: 'Awaiting Player',
+                participant_email: 'awaiting@example.com',
+                participant_username: 'awaitingplayer',
+                item_id: 'shop-1',
+                item_name: 'RECON Tee',
+                point_cost: 2000,
+                redeemed_at: '2026-04-19T10:00:00Z',
+                fulfilled_at: null,
+                fulfillment_notes: null,
+                returned_at: null,
+                return_notes: null,
+            },
+        ],
+    });
+
+    await page.goto('/admin/shop');
+    await expect(page.getByText('AWAITING COLLECTION (1)')).toBeVisible();
+    await expect(page.getByText('Awaiting Player')).toBeVisible();
+    await expect(page.getByText('awaiting@example.com')).toBeVisible();
+
+    await page.getByRole('button', { name: 'FULFILL' }).click();
+    await expect.poll(() => ctx.fulfilledRedemptions).toContain('redemption-awaiting-1');
+    await expect(page.getByText('AWAITING COLLECTION (0)')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'FULFILL' })).toHaveCount(0);
+
+    await page.locator('select').last().selectOption('fulfilled');
+    await expect(page.getByText('Awaiting Player')).toBeVisible();
+    await expect(page.locator('span.status-pill', { hasText: 'fulfilled' })).toHaveCount(1);
 });
 
 test('admin points page awards participant points and finalizes settlements', async ({ page }) => {

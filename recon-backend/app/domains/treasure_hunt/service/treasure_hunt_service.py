@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import re
 import uuid
 
 from fastapi import HTTPException, status
@@ -29,6 +30,24 @@ from app.domains.treasure_hunt.schemas import (
 )
 
 MAX_FINISHERS = 4
+SHA256_HEX_RE = re.compile(r"^[a-f0-9]{64}$")
+NEXT_HINT_BY_SORT_ORDER: dict[int, str] = {
+    1: "The flaws weren't in the tools. They were in the applications.",
+    2: "They left their mark where no one looks for logic.",
+    3: "Everyone played the game. One played the room.",
+    4: "No exploits. No traces. Just a player... or so it seemed.",
+    5: "They didn't stay on one level. Neither should you.",
+    6: "Not everything moves forward. Ah shit here we go again.",
+    7: "Before messages were seen, they were heard.",
+}
+
+
+def compute_route_hash(qr_token: str) -> str:
+    return hashlib.sha256(qr_token.strip().lower().encode("utf-8")).hexdigest()
+
+
+def is_valid_route_hash(route_hash: str) -> bool:
+    return bool(SHA256_HEX_RE.fullmatch(route_hash.strip().lower()))
 
 
 async def reveal_problem(
@@ -39,19 +58,22 @@ async def reveal_problem(
     if not problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
-    solve = await crud.get_solve_by_team_and_problem(db, team_id=team.id, problem_id=problem.id)
-    return TreasureHuntProblemRead(
-        id=problem.id,
-        slug=problem.slug,
-        title=problem.title,
-        teaser=problem.teaser,
-        body_markdown=problem.body_markdown,
-        hint_markdown=problem.hint_markdown,
-        qr_token=problem.qr_token,
-        sort_order=problem.sort_order,
-        already_solved=solve is not None,
-        solved_at=solve.solved_at if solve else None,
-    )
+    return await _build_problem_read(db, team_id=team.id, problem=problem)
+
+
+async def reveal_problem_by_route_hash(
+    db: AsyncSession, *, user: User, route_hash: str
+) -> TreasureHuntProblemRead:
+    _, team, _ = await get_team_context_for_user(db, user=user)
+    normalized = route_hash.strip().lower()
+    if not is_valid_route_hash(normalized):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+
+    problem = await _find_problem_by_route_hash(db, route_hash=normalized)
+    if not problem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+
+    return await _build_problem_read(db, team_id=team.id, problem=problem)
 
 
 async def submit_flag(
@@ -75,6 +97,7 @@ async def submit_flag(
             correct=True,
             team_id=team.id,
             problem_id=problem.id,
+            next_hint=_next_hint_for_sort_order(problem.sort_order),
             solved_count=progress.solved_count,
             total_problems=total_problems,
             completed_at=progress.completed_at,
@@ -88,6 +111,7 @@ async def submit_flag(
             correct=False,
             team_id=team.id,
             problem_id=problem.id,
+            next_hint=None,
             solved_count=progress.solved_count,
             total_problems=total_problems,
             completed_at=progress.completed_at,
@@ -109,6 +133,7 @@ async def submit_flag(
             correct=True,
             team_id=team.id,
             problem_id=problem.id,
+            next_hint=_next_hint_for_sort_order(problem.sort_order),
             solved_count=progress.solved_count,
             total_problems=total_problems,
             completed_at=progress.completed_at,
@@ -135,6 +160,7 @@ async def submit_flag(
                 correct=True,
                 team_id=team.id,
                 problem_id=problem.id,
+                next_hint=_next_hint_for_sort_order(problem.sort_order),
                 solved_count=progress.solved_count,
                 total_problems=total_problems,
                 completed_at=progress.completed_at,
@@ -194,6 +220,7 @@ async def submit_flag(
         correct=True,
         team_id=team.id,
         problem_id=problem.id,
+        next_hint=_next_hint_for_sort_order(problem.sort_order),
         solved_count=progress.solved_count,
         total_problems=total_problems,
         completed_at=progress.completed_at,
@@ -275,12 +302,40 @@ async def _build_problem_statuses(
             problem_id=problem.id,
             slug=problem.slug,
             title=problem.title,
+            route_hash=compute_route_hash(problem.qr_token),
             sort_order=problem.sort_order,
             solved=problem.id in solve_by_problem_id,
             solved_at=solve_by_problem_id[problem.id].solved_at if problem.id in solve_by_problem_id else None,
         )
         for problem in problems
     ]
+
+
+async def _build_problem_read(
+    db: AsyncSession, *, team_id: uuid.UUID, problem
+) -> TreasureHuntProblemRead:
+    solve = await crud.get_solve_by_team_and_problem(db, team_id=team_id, problem_id=problem.id)
+    return TreasureHuntProblemRead(
+        id=problem.id,
+        slug=problem.slug,
+        title=problem.title,
+        teaser=problem.teaser,
+        body_markdown=problem.body_markdown,
+        hint_markdown=problem.hint_markdown,
+        qr_token=problem.qr_token,
+        route_hash=compute_route_hash(problem.qr_token),
+        sort_order=problem.sort_order,
+        already_solved=solve is not None,
+        solved_at=solve.solved_at if solve else None,
+    )
+
+
+async def _find_problem_by_route_hash(db: AsyncSession, *, route_hash: str):
+    problems = await crud.list_active_problems(db)
+    for problem in problems:
+        if hmac.compare_digest(compute_route_hash(problem.qr_token), route_hash):
+            return problem
+    return None
 
 
 async def _get_or_create_team_progress(
@@ -348,6 +403,7 @@ def _build_submit_response(
     correct: bool,
     team_id: uuid.UUID,
     problem_id: uuid.UUID,
+    next_hint: str | None,
     solved_count: int,
     total_problems: int,
     completed_at,
@@ -358,8 +414,13 @@ def _build_submit_response(
         status=status_name,
         team_id=team_id,
         problem_id=problem_id,
+        next_hint=next_hint,
         solved_count=solved_count,
         total_problems=total_problems,
         completed_at=completed_at,
         finish_rank=finish_rank,
     )
+
+
+def _next_hint_for_sort_order(sort_order: int) -> str | None:
+    return NEXT_HINT_BY_SORT_ORDER.get(sort_order)

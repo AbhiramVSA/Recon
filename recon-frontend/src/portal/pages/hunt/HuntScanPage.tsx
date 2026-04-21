@@ -83,8 +83,8 @@ export default function HuntScanPage() {
     const resolveToken = useCallback(
         async (rawPayload: string) => {
             if (resolvingRef.current) return;
-            const token = normalizeQrPayload(rawPayload);
-            if (!token) {
+            const parsed = normalizeQrPayload(rawPayload);
+            if (!parsed) {
                 setUi('invalid_code');
                 setApiError(null);
                 if (navigator.vibrate) navigator.vibrate(30);
@@ -97,9 +97,14 @@ export default function HuntScanPage() {
             void releaseWakeLock();
             try {
                 cancelAnimationFrame(rafRef.current);
-                const problem = await scanProblem(token);
+                const problem = await scanProblem(parsed.value);
                 setProblemCache(problem);
                 if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
+                const nextRouteHash = problem.route_hash || (parsed.kind === 'route_hash' ? parsed.value : '');
+                if (nextRouteHash) {
+                    navigate(`/hunt/r/${nextRouteHash}`, { state: { problem } });
+                    return;
+                }
                 navigate(`/hunt/problem/${problem.id}`, { state: { problem } });
             } catch (err) {
                 resolvingRef.current = false;
@@ -195,8 +200,18 @@ export default function HuntScanPage() {
                 navigate('/hunt/team', { replace: true });
                 return;
             }
+            if (!navigator.mediaDevices?.getUserMedia) {
+                setUi('camera_unavailable');
+                setApiError('Camera API is not available in this browser. Use manual token entry.');
+                return;
+            }
+            const insecureContext = !window.isSecureContext;
             setUi('requesting_permission');
-            setApiError(null);
+            setApiError(
+                insecureContext
+                    ? 'Camera access requires HTTPS (or localhost). If camera fails, use manual token entry.'
+                    : null,
+            );
             stoppedRef.current = false;
 
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -239,8 +254,14 @@ export default function HuntScanPage() {
 
     const onManualSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const trimmed = manual.trim();
+        if (!trimmed) {
+            setApiError('Enter a QR URL, route hash, or token before submitting.');
+            setUi('invalid_code');
+            return;
+        }
         stoppedRef.current = false;
-        void resolveToken(manual);
+        void resolveToken(trimmed);
     };
 
     if (teamLoadStatus === 'loading' || teamLoadStatus === 'idle') {
@@ -334,8 +355,8 @@ export default function HuntScanPage() {
                             )}
                             {ui === 'invalid_code' && (
                                 <p className="font-portal-body text-[13px] text-[var(--portal-red)]">
-                                    That text does not look like a valid hunt token. Try again or use manual entry with a
-                                    token like th-01-shifted-ssid.
+                                    That payload does not look like a valid hunt token or route hash. Try again or paste the
+                                    full QR URL.
                                 </p>
                             )}
                             {(ui === 'idle' || ui === 'invalid_code') && (
@@ -408,12 +429,15 @@ export default function HuntScanPage() {
                 <form onSubmit={onManualSubmit} className="grid gap-3">
                     <input
                         value={manual}
-                        onChange={(e) => setManual(e.target.value)}
-                        placeholder="th-01-shifted-ssid or paste URL"
+                        onChange={(e) => {
+                            setManual(e.target.value);
+                            if (apiError) setApiError(null);
+                        }}
+                        placeholder="paste QR URL, route hash, or token"
                         className="w-full min-h-11 bg-[var(--bg)] border border-[var(--border-dim)] px-4 py-3 font-portal-mono text-[13px] text-[var(--fg)] outline-none focus:border-[var(--amber)]"
                         autoComplete="off"
                     />
-                    <PrimaryButton type="submit" disabled={ui === 'resolving_token'}>
+                    <PrimaryButton type="submit" disabled={ui === 'resolving_token' || manual.trim().length === 0}>
                         {ui === 'resolving_token' ? 'LOADING…' : 'Load challenge'}
                     </PrimaryButton>
                 </form>

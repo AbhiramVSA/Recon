@@ -227,7 +227,7 @@ export const MERCH_ITEMS: MerchItem[] = [
         name: 'RECON 2026 T-Shirt - Operator Edition',
         type: 'APPAREL',
         pointsCost: 2000,
-        stock: 48,
+        stock: 67,
         description:
             'Dark ops tactical tee with RECON 2026 wordmark on front and event callsign print on back.',
         image: '/merch/merch01.webp',
@@ -237,7 +237,7 @@ export const MERCH_ITEMS: MerchItem[] = [
         name: 'OSEN T-Shirt',
         type: 'APPAREL',
         pointsCost: 2000,
-        stock: 32,
+        stock: 0,
         description:
             'Official OSEN collaboration tee for operators who want the community edition drop.',
         image: '/merch/merch02.webp',
@@ -277,7 +277,7 @@ export const MERCH_ITEMS: MerchItem[] = [
         name: 'Cybersecurity Book',
         type: 'ACCESSORIES',
         pointsCost: 1000,
-        stock: 10,
+        stock: 0,
         description:
             'One curated cybersecurity book reward from the merch desk book pool.',
     },

@@ -14,6 +14,7 @@ class TreasureHuntProblemRead(SQLModel):
     body_markdown: str
     hint_markdown: str | None
     qr_token: str
+    route_hash: str
     sort_order: int
     already_solved: bool
     solved_at: datetime | None
@@ -23,6 +24,7 @@ class TreasureHuntProblemStatusRead(SQLModel):
     problem_id: uuid.UUID
     slug: str
     title: str
+    route_hash: str
     sort_order: int
     solved: bool
     solved_at: datetime | None
@@ -54,6 +56,7 @@ class TreasureHuntFlagSubmitRead(SQLModel):
     status: Literal["incorrect", "solved", "already_solved"]
     team_id: uuid.UUID
     problem_id: uuid.UUID
+    next_hint: str | None = None
     solved_count: int
     total_problems: int
     completed_at: datetime | None

@@ -31,6 +31,7 @@ export interface TreasureHuntProblemRead {
     body_markdown: string;
     hint_markdown: string | null;
     qr_token: string;
+    route_hash: string;
     sort_order: number;
     already_solved: boolean;
     solved_at: string | null;
@@ -40,6 +41,7 @@ export interface TreasureHuntProblemStatusRead {
     problem_id: string;
     slug: string;
     title: string;
+    route_hash: string;
     sort_order: number;
     solved: boolean;
     solved_at: string | null;
@@ -57,6 +59,7 @@ export interface TreasureHuntFlagSubmitRead {
     status: TreasureHuntSubmitStatus;
     team_id: string;
     problem_id: string;
+    next_hint: string | null;
     solved_count: number;
     total_problems: number;
     completed_at: string | null;

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { TreasureHuntProblemRead } from '../lib/treasureHuntTypes';
 
-/** In-memory cache for full problem payloads after a scan (helps cold `/hunt/problem/:id` when router state is lost). */
+/** In-memory cache for full problem payloads after a scan (helps cold hashed QR routes when router state is lost). */
 interface HuntScanState {
     problemsById: Record<string, TreasureHuntProblemRead>;
     setProblemCache: (problem: TreasureHuntProblemRead) => void;

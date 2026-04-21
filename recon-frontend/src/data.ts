@@ -438,6 +438,13 @@ export const mentors: Mentor[] = [
         photo: 'https://vitap-backend.s3.ap-south-1.amazonaws.com/Dr_THANGAM_SIVANANTHAM_SCOPE_995e08ebc2.avif',
         url: 'https://vitap.ac.in/School%20of%20Computer%20Science%20and%20Engineering%20(SCOPE)/faculty/thangam.s',
     },
+    {
+        name: 'Aditya Mitra',
+        role: 'Mentor — RECON 2026',
+        bio: 'Mentor, RECON 2026.',
+        photo: 'https://scholar.googleusercontent.com/citations?view_op=medium_photo&user=oXPSCNUAAAAJ&citpid=1',
+        url: 'https://www.linkedin.com/in/adityamitra5102/',
+    },
 ];
 
 /* ── Partners ─────────────────────────────────────────────────── */

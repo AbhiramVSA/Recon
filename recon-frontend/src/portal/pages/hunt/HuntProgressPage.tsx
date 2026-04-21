@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { getMyProgress } from '../../api/treasureHunt';
 import { ApiError } from '../../api/client';
 import { getApiErrorMessage } from '../../lib/apiErrorMessage';
+import { getDisplayedHuntProblemCount } from '../../lib/huntMeta';
 import type { TreasureHuntTeamProgressRead } from '../../lib/treasureHuntTypes';
 import PortalPage from '../../components/PortalPage';
 import { GhostButton, PortalCard, SectionLabel, StatusPill } from '../../components/primitives';
@@ -135,7 +136,7 @@ export default function HuntProgressPage() {
         return <Navigate to="/hunt/team" replace />;
     }
 
-    const total = progress?.total_problems ?? 0;
+    const total = getDisplayedHuntProblemCount(ordered.length, progress?.total_problems);
     const solved = progress?.solved_count ?? 0;
     const finishRank = progress?.finish_rank ?? null;
 
@@ -147,8 +148,7 @@ export default function HuntProgressPage() {
                     Progress
                 </div>
                 <p className="font-portal-body text-[13px] leading-relaxed text-[color-mix(in_srgb,var(--dim)_78%,white_8%)] mt-3">
-                    Tap a challenge to open it. Full prompt text appears after you scan that challenge&apos;s QR or paste its
-                    token.
+                    Tap a challenge to open it. This hunt uses the 8 problems from the CTF puzzle bank.
                 </p>
             </div>
 
@@ -191,7 +191,7 @@ export default function HuntProgressPage() {
                     {ordered.map((row) => (
                         <li key={row.problem_id}>
                             <Link
-                                to={`/hunt/problem/${row.problem_id}`}
+                                to={row.route_hash ? `/hunt/r/${row.route_hash}` : `/hunt/problem/${row.problem_id}`}
                                 className="block portal-card p-4 sm:p-5 no-underline text-[var(--fg)] hover:border-[var(--amber)] border border-[var(--border-dim)] transition-colors"
                             >
                                 <div className="flex items-start justify-between gap-3">

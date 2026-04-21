@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { getMyProgress } from '../../api/treasureHunt';
 import { ApiError } from '../../api/client';
 import { getApiErrorMessage } from '../../lib/apiErrorMessage';
+import { getDisplayedHuntProblemCount } from '../../lib/huntMeta';
 import type { TreasureHuntTeamProgressRead } from '../../lib/treasureHuntTypes';
 import PortalPage from '../../components/PortalPage';
 import { GhostButton, PortalCard, SectionLabel, StatusPill } from '../../components/primitives';
@@ -144,9 +145,9 @@ export default function HuntHomePage() {
         );
     }
 
-    const total = progress?.total_problems ?? 0;
+    const total = getDisplayedHuntProblemCount(progress?.problems?.length, progress?.total_problems);
     const solved = progress?.solved_count ?? 0;
-    const remaining = progress?.remaining_count ?? Math.max(0, total - solved);
+    const remaining = Math.max(0, total - solved);
     const rank = progress?.leaderboard_rank;
     const completedAll = Boolean(progress && total > 0 && solved >= total);
     const finishRank = progress?.finish_rank ?? null;
@@ -161,6 +162,9 @@ export default function HuntHomePage() {
                 <p className="font-portal-body text-[13px] leading-relaxed text-[color-mix(in_srgb,var(--dim)_75%,white_8%)] mt-3">
                     Team progress and hunt actions. Invite:{' '}
                     <span className="font-portal-mono text-[var(--amber)]">{team.invite_code}</span>
+                </p>
+                <p className="font-portal-mono text-[10px] tracking-[0.16em] uppercase text-[color-mix(in_srgb,var(--amber)_58%,black_12%)] mt-3">
+                    8 challenge CTF hunt
                 </p>
             </div>
 

@@ -16,7 +16,7 @@ function Ensure-Command {
 
 function Get-RepoRoot {
     $scriptDir = Split-Path -Parent $PSCommandPath
-    return (Resolve-Path (Join-Path $scriptDir "..")).Path
+    return (Resolve-Path (Join-Path $scriptDir "..\..")).Path
 }
 
 function Load-AsyncDsnFromEnv {
@@ -63,13 +63,13 @@ Write-Host "Using LIVE_BASE_URL=$($env:LIVE_BASE_URL)" -ForegroundColor DarkGray
 Push-Location $repoRoot
 try {
     Write-Step "Running points router/in-process suite"
-    uv run pytest app/domains/points/tests/test_point_router.py -q
+    uv run pytest backend/app/domains/points/tests/test_point_router.py -q
 
     Write-Step "Running points Postgres concurrency suite (destructive schema reset)"
-    uv run pytest app/domains/points/tests/test_point_router_postgres.py -q
+    uv run pytest backend/app/domains/points/tests/test_point_router_postgres.py -q
 
     Write-Step "Running points live-server suite"
-    uv run pytest tests/test_points_live_server.py -q
+    uv run pytest backend/tests/test_points_live_server.py -q
 
     Write-Step "All points suites completed successfully"
 }

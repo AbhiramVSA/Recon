@@ -3,18 +3,17 @@ import pytest
 from app.domains.auth.models import ROLE_ADMIN
 from app.domains.treasure_hunt.models import TreasureHuntProblem
 from app.domains.treasure_hunt.seed_data import TREASURE_HUNT_PROBLEM_SEED
+from app.domains.treasure_hunt.service import compute_route_hash
 
 FLAG_BY_SLUG = {
-    "shifted-ssid": "RECON{CAESAR_OVER_COFFEE}",
-    "badge-b64": "RECON{B64_BADGE_BINGO}",
-    "redirect-maze": "RECON{URLS_CAN_LIE}",
-    "packet-hex": "RECON{HEX_DUMPS_TELL_STORIES}",
-    "binary-buzz": "RECON{BITS_BEAT_GUESSES}",
-    "rot13-breach": "RECON{ROT13_IS_NOT_SECURITY}",
-    "leet-locker": "RECON{LEETSPEAK_IS_NOT_ENCRYPTION}",
-    "cookie-crumbs": "RECON{COOKIES_SPLIT_SECRETS}",
-    "header-hunt": "RECON{READ_THE_HEADERS}",
-    "reverse-rumor": "RECON{MOBILE_FORENSICS_WINS}",
+    "dancing-men": "ELEMENTARY MY DEAR WATSON",
+    "unown-pokemon-alphabet": "THE DARK KNIGHT ALWAYS RISES",
+    "semaphore-trousers-cipher": "ONE DOES NOT SIMPLY WALK",
+    "lunar-alphabet": "KEEP YOUR FRIENDS CLOSE",
+    "braile-decode": "BRAILLE DECODE SUCCESS",
+    "qr-code": "HIDDEN IN PLAIN SIGHT",
+    "satellite-intercept": "EXIF FOUND HOSTEL TRACE",
+    "nokia-3310-lost-signals": "NOKIA IS GOATED ICL",
 }
 
 
@@ -57,39 +56,44 @@ async def test_scan_and_submit_correct_flag_updates_progress(
     await _create_team(client, auth_override, user, "Signal Seekers")
 
     auth_override(user)
-    scanned = await client.get("/api/v1/treasure-hunt/scan/th-01-shifted-ssid")
+    scanned = await client.get("/api/v1/treasure-hunt/scan/th-01-dancing-men")
     assert scanned.status_code == 200
-    assert scanned.json()["slug"] == "shifted-ssid"
+    assert scanned.json()["slug"] == "dancing-men"
     assert scanned.json()["already_solved"] is False
+    assert scanned.json()["route_hash"] == compute_route_hash("th-01-dancing-men")
 
-    problem_id = str(seeded["shifted-ssid"].id)
+    problem_id = str(seeded["dancing-men"].id)
     submit = await client.post(
         f"/api/v1/treasure-hunt/problems/{problem_id}/submit",
         json={
-            "flag": "RECON{CAESAR_OVER_COFFEE}",
+            "flag": "ELEMENTARY MY DEAR WATSON",
             "idempotency_key": "hunt-solve-1",
         },
     )
     assert submit.status_code == 200
     assert submit.json()["status"] == "solved"
     assert submit.json()["solved_count"] == 1
+    assert (
+        submit.json()["next_hint"]
+        == "The flaws weren't in the tools. They were in the applications."
+    )
 
     progress = await client.get("/api/v1/treasure-hunt/me/progress")
     assert progress.status_code == 200
     body = progress.json()
     assert body["solved_count"] == 1
-    assert body["remaining_count"] == 9
+    assert body["remaining_count"] == 7
     assert body["leaderboard_rank"] == 1
     solved = {item["slug"]: item["solved"] for item in body["problems"]}
-    assert solved["shifted-ssid"] is True
+    assert solved["dancing-men"] is True
 
     team_points = await client.get("/api/v1/points/team-events/me")
     assert team_points.status_code == 200
-    assert team_points.json()["normalized_points"] == 16
+    assert team_points.json()["normalized_points"] == 20
     assert team_points.json()["event_summaries"] == [
         {
             "event_key": "treasure_hunt",
-            "normalized_points": 16,
+            "normalized_points": 20,
             "raw_score_total": 100,
         }
     ]
@@ -105,9 +109,9 @@ async def test_duplicate_submit_is_idempotent_for_same_team_and_problem(
     await _create_team(client, auth_override, user, "Idem Squad")
 
     auth_override(user)
-    problem_id = str(seeded["badge-b64"].id)
+    problem_id = str(seeded["unown-pokemon-alphabet"].id)
     payload = {
-        "flag": "RECON{B64_BADGE_BINGO}",
+        "flag": "THE DARK KNIGHT ALWAYS RISES",
         "idempotency_key": "hunt-idem-1",
     }
     first = await client.post(f"/api/v1/treasure-hunt/problems/{problem_id}/submit", json=payload)
@@ -132,7 +136,7 @@ async def test_incorrect_flag_does_not_increment_progress_or_create_finish(
     await _create_team(client, auth_override, user, "Wrong Flaggers")
 
     auth_override(user)
-    problem_id = str(seeded["redirect-maze"].id)
+    problem_id = str(seeded["semaphore-trousers-cipher"].id)
     submit = await client.post(
         f"/api/v1/treasure-hunt/problems/{problem_id}/submit",
         json={
@@ -146,6 +150,7 @@ async def test_incorrect_flag_does_not_increment_progress_or_create_finish(
     assert submit.json()["correct"] is False
     assert submit.json()["solved_count"] == 0
     assert submit.json()["finish_rank"] is None
+    assert submit.json()["next_hint"] is None
 
     progress = await client.get("/api/v1/treasure-hunt/me/progress")
     assert progress.status_code == 200
@@ -163,17 +168,17 @@ async def test_same_idempotency_key_on_different_problem_conflicts(
     await _create_team(client, auth_override, user, "Conflict Squad")
 
     auth_override(user)
-    first_problem_id = str(seeded["shifted-ssid"].id)
-    second_problem_id = str(seeded["badge-b64"].id)
+    first_problem_id = str(seeded["dancing-men"].id)
+    second_problem_id = str(seeded["unown-pokemon-alphabet"].id)
     idem = "hunt-conflict-1"
 
     first = await client.post(
         f"/api/v1/treasure-hunt/problems/{first_problem_id}/submit",
-        json={"flag": FLAG_BY_SLUG["shifted-ssid"], "idempotency_key": idem},
+        json={"flag": FLAG_BY_SLUG["dancing-men"], "idempotency_key": idem},
     )
     second = await client.post(
         f"/api/v1/treasure-hunt/problems/{second_problem_id}/submit",
-        json={"flag": FLAG_BY_SLUG["badge-b64"], "idempotency_key": idem},
+        json={"flag": FLAG_BY_SLUG["unown-pokemon-alphabet"], "idempotency_key": idem},
     )
 
     assert first.status_code == 200
@@ -226,9 +231,9 @@ async def test_first_four_finishers_are_recorded_in_order(
 
     leaderboard = await client.get("/api/v1/treasure-hunt/leaderboard")
     assert leaderboard.status_code == 200
-    assert leaderboard.json()["entries"][0]["solved_count"] == 10
+    assert leaderboard.json()["entries"][0]["solved_count"] == 8
     fifth = [entry for entry in leaderboard.json()["entries"] if entry["team_name"] == "Finish Team 4"][0]
-    assert fifth["solved_count"] == 10
+    assert fifth["solved_count"] == 8
     assert fifth["finish_rank"] is None
 
 
@@ -239,9 +244,28 @@ async def test_scan_requires_team_membership(client, auth_override, create_user,
     await _create_participant(client, auth_override, user, "scan-no-team")
 
     auth_override(user)
-    response = await client.get("/api/v1/treasure-hunt/scan/th-01-shifted-ssid")
+    response = await client.get("/api/v1/treasure-hunt/scan/th-01-dancing-men")
     assert response.status_code == 404
     assert response.json()["detail"] == "Participant is not part of a team"
+
+
+@pytest.mark.asyncio
+async def test_scan_by_route_hash_resolves_problem(
+    client, auth_override, create_user, session_factory
+):
+    await _seed_catalog(session_factory)
+    user = await create_user(email="scan-by-hash@example.com", username="scanbyhash")
+    await _create_participant(client, auth_override, user, "scan-by-hash")
+    await _create_team(client, auth_override, user, "Hash Team")
+
+    auth_override(user)
+    route_hash = compute_route_hash("th-02-unown-pokemon-alphabet")
+    response = await client.get(f"/api/v1/treasure-hunt/scan/routes/{route_hash}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["slug"] == "unown-pokemon-alphabet"
+    assert body["route_hash"] == route_hash
 
 
 @pytest.mark.asyncio
@@ -255,10 +279,10 @@ async def test_admin_can_read_leaderboard_and_finishers_without_participant_prof
     await _create_team(client, auth_override, participant_user, "Board Team")
 
     auth_override(participant_user)
-    problem_id = str(seeded["shifted-ssid"].id)
+    problem_id = str(seeded["dancing-men"].id)
     solved = await client.post(
         f"/api/v1/treasure-hunt/problems/{problem_id}/submit",
-        json={"flag": FLAG_BY_SLUG["shifted-ssid"], "idempotency_key": "admin-board-1"},
+        json={"flag": FLAG_BY_SLUG["dancing-men"], "idempotency_key": "admin-board-1"},
     )
     assert solved.status_code == 200
 

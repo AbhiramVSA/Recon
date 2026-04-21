@@ -22,7 +22,7 @@ from app.domains.shop.crud import (
     get_redemption_by_return_idempotency_key,
     get_redemption_for_update,
     list_active_items,
-    list_all_redemptions as crud_list_all_redemptions,
+    list_all_redemptions_with_buyer_info,
     list_redemptions_by_participant,
     return_redemption as crud_return_redemption,
     update_item,
@@ -198,8 +198,20 @@ async def list_my_redemptions(
 async def list_all_redemptions_admin(
     db: AsyncSession, *, fulfilled: Optional[bool] = None, returned: Optional[bool] = None
 ) -> list[RedemptionRead]:
-    redemptions = await crud_list_all_redemptions(db, fulfilled=fulfilled, returned=returned)
-    return [_redemption_to_read(r) for r in redemptions]
+    rows = await list_all_redemptions_with_buyer_info(
+        db,
+        fulfilled=fulfilled,
+        returned=returned,
+    )
+    return [
+        _redemption_to_read(
+            row[0],
+            participant_display_name=row[1],
+            participant_email=row[2],
+            participant_username=row[3],
+        )
+        for row in rows
+    ]
 
 
 async def fulfill_redemption_admin(
@@ -398,10 +410,19 @@ def _item_to_read(item: ShopItem, remaining_stock: Optional[int]) -> ShopItemRea
     )
 
 
-def _redemption_to_read(redemption: Redemption) -> RedemptionRead:
+def _redemption_to_read(
+    redemption: Redemption,
+    *,
+    participant_display_name: str | None = None,
+    participant_email: str | None = None,
+    participant_username: str | None = None,
+) -> RedemptionRead:
     return RedemptionRead(
         id=redemption.id,
         participant_id=redemption.participant_id,
+        participant_display_name=participant_display_name,
+        participant_email=participant_email,
+        participant_username=participant_username,
         item_id=redemption.item_id,
         item_name=redemption.item_name_snapshot,
         point_cost=redemption.point_cost_snapshot,

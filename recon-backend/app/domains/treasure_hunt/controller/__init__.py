@@ -3,6 +3,7 @@ from app.domains.treasure_hunt.controller.treasure_hunt_controller import (
     leaderboard,
     my_progress,
     scan_problem,
+    scan_problem_by_route_hash,
     submit_problem_flag,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "leaderboard",
     "my_progress",
     "scan_problem",
+    "scan_problem_by_route_hash",
     "submit_problem_flag",
 ]
