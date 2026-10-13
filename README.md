@@ -1,238 +1,127 @@
-# Recon
+<h1 align="center">
+  <img src="assets/recon-platform-mark.png" width="200" alt="Teal and indigo circular route links four location pins">
+  Recon
+</h1>
 
-Recon is a split frontend/backend event platform built for a DEFCON-style cybersecurity fest. It combines a FastAPI API, a React client, a points and leaderboard system, participant/team flows, zone registration and check-in, admin operations, partner workflows, and event-specific game mechanics in one repository.
+<h4 align="center">A split event platform for a DEFCON-style cybersecurity fest.</h4>
 
-This repository is organized as a public, open-source-friendly workspace:
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-backend/pyproject.toml"><img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white"></a>  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-backend/pyproject.toml"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-API-009688?style=flat-square&amp;logo=fastapi&amp;logoColor=white"></a>
+</p>
 
-- `recon-backend/` contains the backend API, database models, migrations, and backend test suite.
-- `recon-frontend/` contains the React + Vite application.
-- The repository root contains shared documentation, contribution policy, and repo metadata only.
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&amp;logo=react&amp;logoColor=black"></a>
+</p>
 
-## What Recon Covers
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="TypeScript 6" src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white"></a>  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="Vite 8" src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&amp;logo=vite&amp;logoColor=white"></a>
+</p>
 
-Recon is designed to support an event platform with multiple stakeholder surfaces:
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="Node.js 22.x" src="https://img.shields.io/badge/Node.js-22.x-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white"></a>
+</p>
 
-- Participant-facing experiences such as profiles, schedules, announcements, registrations, passes, team flows, and points.
-- Operations and admin workflows such as check-in, announcements, incident handling, and event oversight.
-- Partner and sponsor workflows such as application intake, approvals, assets, incentives, and reporting.
-- Event mechanics such as leaderboard-driven activities, treasure hunt progression, and zone-based attendance/check-in.
+<p align="center">
+  <a href="#key-features">Key Features</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#how-to-use">How to Use</a>
+</p>
 
-## External Systems Not Owned Here
+<p align="center">
+  <a href="#tests-and-build">Tests and Build</a> •
+  <a href="#security">Security</a> •
+  <a href="#license">License</a>
+</p>
 
-Recon integrates with or sits alongside several external systems. Those systems are not reimplemented in this repository:
+The repository has no screenshot from a verified local demo.
 
-- `Luma` for registration, RSVP, and ticket scanning.
-- `CTFd` for the competition platform.
-- `KOTH` for local network-based competition infrastructure.
-- `n8n` for form and webhook automation.
-- `Grafana` and `CloudWatch` for infrastructure monitoring.
-- `Telegram` and `WhatsApp` for volunteer communications.
+## Key Features
 
-That boundary matters for contributors: changes in this repository should improve Recon itself, not rebuild surrounding event tooling.
-
-## Repository Layout
-
-```text
-.
-|-- recon-backend/             FastAPI backend, Alembic migrations, backend tests
-|-- recon-frontend/            React + Vite frontend
-|-- DOCS/                      Supporting project and event material
-|-- .github/                   Repo metadata and parked workflow files
-|-- AGENTS.md                  Architecture, conventions, and project state
-|-- CONTRIBUTING.md            Contributor workflow and engineering rules
-|-- SECURITY.md                Vulnerability reporting policy
-```
-
-## Stack Overview
-
-### Backend
-
-- `FastAPI` for the async API layer
-- `SQLModel` and `SQLAlchemy` for models and persistence
-- `PostgreSQL` via `asyncpg`
-- `Redis` for cache and realtime/event support
-- `Alembic` for schema migrations
-- `Authlib` + cookie-based JWT auth for sign-in/session flows
-
-### Frontend
-
-- `React 19`
-- `TypeScript`
-- `Vite`
-- `Tailwind CSS`
-- `Vitest` and `Playwright`
+- Participant flows cover profiles, schedules, announcements, registration, passes, teams, and points.
+- Operations flows cover check-in, announcements, incidents, and event oversight.
+- Partner flows cover applications, approvals, assets, incentives, and reports.
+- Event activities include leaderboards, treasure-hunt progress, and zone attendance.
+- The frontend provides public pages and portal or admin views.
 
 ## Architecture
 
-The backend follows a layered pattern:
+Recon keeps its API and web client in separate project folders.
 
-```text
-Router -> Controller -> Service -> CRUD
-```
+| Area | Stack |
+| --- | --- |
+| Backend | FastAPI, SQLModel, PostgreSQL, Redis, and Alembic |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Vitest, and Playwright |
 
-- Routers stay thin and handle HTTP concerns only.
-- Controllers orchestrate flows across services.
-- Services contain business logic.
-- CRUD modules perform raw database operations.
+See the [backend guide](recon-backend/README.md) and [frontend guide](recon-frontend/README.md).
 
-At the top level, the backend is split by audience:
+## How to Use
 
-- `domains/` for participant-facing product areas
-- `admin/` for operations/admin surfaces
-- `partners/` for sponsor and partner features
-- `infrastructure/` for shared technical capabilities
-- `utils/` for framework plumbing
+Use two terminals from the repository root.
 
-This structure is explained in more detail in [`AGENTS.md`](AGENTS.md) and the backend-specific README.
-
-## Current Feature Areas
-
-The repository already includes meaningful implementation across several domains:
-
-- Authentication with Google OAuth, JWT sessions, refresh/logout, RBAC, and bootstrap admin support
-- Participant profiles and participant/admin discovery flows
-- Points ledger, leaderboards, and team competition scoring
-- Zone registration, QR pass generation, and atomic admin check-in
-- Teams, treasure hunt progression, announcements, incidents, and partner workflows
-- Storage helpers for presigned object access
-- Frontend public pages plus portal/admin-facing surfaces
-
-This is not a blank scaffold. It is an actively shaped event platform with real application structure and non-trivial backend logic.
-
-## Quick Start
-
-### Prerequisites
-
-- `Python 3.12+`
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for backend dependency management
-- `Node.js 22.x`
-- `npm`
-- `PostgreSQL`
-- `Redis`
-
-### 1. Start the backend
+**Backend**
 
 ```bash
 cd recon-backend
-cp .env.example .env
 uv sync
+touch .env
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-Backend defaults:
+Backend settings read `.env` from `recon-backend/` or the repository root. The contributor guide lists database, Redis, application-secret, and Google OAuth settings. The repository does not track an `.env.example` file. Add local values for your services. Do not commit secrets. The API documentation is available at `http://localhost:8000/docs`.
 
-- API: `http://localhost:8000`
-- OpenAPI docs: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-### 2. Start the frontend
+**Frontend**
 
 ```bash
 cd recon-frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
 
-Frontend default:
+The frontend package declares Node.js 22.x in its `engines` field. The frontend source reads `VITE_API_BASE_URL` when set. The repository does not track an `.env.example` file. Set this variable in your local environment only when you need to change the API URL.
 
-- App: `http://localhost:5173`
+## Tests and Build
 
-## Configuration
+Run the commands from their project directories.
 
-Example environment files are included for both apps:
-
-- [`recon-backend/.env.example`](recon-backend/.env.example)
-- [`recon-frontend/.env.example`](recon-frontend/.env.example)
-
-The repository does not commit real secrets. Before running locally, configure at minimum:
-
-- database connection settings
-- Redis connection settings
-- JWT/application secret
-- Google OAuth client credentials for backend auth flows
-- frontend API base URL
-
-The backend also ships a placeholder Google OAuth allowlist file for safe open-source publication. Replace it for real deployments.
-
-## Development Workflow
-
-### Backend
+**Backend**
 
 ```bash
 cd recon-backend
-uv sync
 uv run pytest
 ```
 
-Common backend tasks:
-
-```bash
-cd recon-backend
-uv run alembic upgrade head
-uv run alembic revision --autogenerate -m "describe change"
-uv run uvicorn app.main:app --reload
-```
-
-### Frontend
+**Frontend**
 
 ```bash
 cd recon-frontend
-npm install
-npm run dev
 npm run test
+npm run test:e2e
 npm run build
 ```
 
-## Testing
+These commands are documented or declared by the source. This draft does not report a test result.
 
-The repository is set up for both backend and frontend validation:
+## Development
 
-- backend tests use `pytest`
-- frontend unit tests use `Vitest`
-- frontend end-to-end tests use `Playwright`
+The frontend keeps event copy, statistics, schedules, team content, and partner content in `recon-frontend/src/data.ts`. Its component files control section visuals and behavior.
 
-When changing API contracts, data models, or app flows, validate both sides of the split workspace where relevant.
-
-## Documentation Map
-
-- Backend setup and service-level details: [recon-backend/README.md](recon-backend/README.md)
-- Frontend setup and scripts: [recon-frontend/README.md](recon-frontend/README.md)
-- Contributor workflow and engineering rules: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Security reporting policy: [SECURITY.md](SECURITY.md)
-- Architecture and living project state: [AGENTS.md](AGENTS.md)
-
-## Open-Source Readiness Notes
-
-This repository has been cleaned up for public publication:
-
-- frontend and backend live in clearly separated top-level directories
-- example env files are provided instead of committed secrets
-- active deployment workflows are intentionally disabled by default
-- parked GitHub Actions files live under `.github/workflows.disabled/`
-- repository-level ignores are in place for local artifacts and editor noise
-
-If you enable CI/CD later, move or recreate only the workflows that match your actual deployment target.
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening changes. The main engineering rules live in [AGENTS.md](AGENTS.md), especially for:
-
-- backend folder ownership and architecture
-- model registration and router mounting
-- migration workflow
-- dependency injection rules
-- project state maintenance
+The backend uses domain, admin, and partner areas. Recon works with Luma, CTFd, KOTH, n8n, Grafana, CloudWatch, Telegram, and WhatsApp. This repository does not reimplement those systems. Every change here must improve Recon itself. Do not rebuild those event systems here. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before you change backend structure or database models.
 
 ## Security
 
-Please do not report vulnerabilities in public issues. See [SECURITY.md](SECURITY.md) for responsible disclosure instructions.
+Do not report vulnerabilities in public issues. Follow the instructions in [SECURITY.md](SECURITY.md).
 
-## Project Status
-
-Recon is event-oriented software with active implementation across backend and frontend surfaces. Some areas are complete, some are scaffolded, and some are still evolving. The source of truth for current backend/domain status is the `Project State` section in [`AGENTS.md`](AGENTS.md).
+Use local configuration for external services. Keep credentials and real event data out of commits.
 
 ## License
 
-A repository-wide `LICENSE` file is not currently present. Add one before accepting broad third-party reuse or external contributions under a defined open-source license.
+The source README states: “A repository-wide LICENSE file is not currently present. Add one before accepting broad third-party reuse or external contributions under a defined open-source license.”
+
+---
+
+<p align="center">
+  <a href="CONTRIBUTING.md">Contributor guide</a> •
+  <a href="SECURITY.md">Security</a> •
+  <a href="DOCS/treasure_hunt/README.md">Treasure Hunt notes</a>
+</p>

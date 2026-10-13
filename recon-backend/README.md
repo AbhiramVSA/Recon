@@ -1,97 +1,98 @@
-# Recon Backend
+<h1 align="center">
+  <img src="../assets/recon-platform-mark.png" width="200" alt="Teal and indigo circular route links four location pins">
+  Recon Backend
+</h1>
 
-Backend for Recon — a 3-day, 600-person DEFCON-style cybersecurity event at VIT-AP (Apr 19–21). Powers the participant PWA, admin ops dashboard, and sponsor dashboards.
+<h4 align="center">FastAPI services for Recon participant, operations, and partner workflows.</h4>
 
-## Stack
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-backend/pyproject.toml"><img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white"></a>  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-backend/pyproject.toml"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-API-009688?style=flat-square&amp;logo=fastapi&amp;logoColor=white"></a>
+</p>
 
-- **FastAPI** (async) — API framework
-- **SQLModel** — ORM + Pydantic validation
-- **PostgreSQL** via asyncpg (Neon managed)
-- **Redis** — caching and pub/sub
-- **Alembic** — database migrations
-- **Cloudflare R2** — file storage (S3-compatible)
-- **Logfire** — observability
-- **uv** — package manager (not pip)
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-backend/pyproject.toml"><img alt="SQLModel" src="https://img.shields.io/badge/SQLModel-ORM-3E6B8B?style=flat-square"></a>
+</p>
 
-## Prerequisites
+<p align="center">
+  <a href="#key-features">Key Features</a> •
+  <a href="#requirements">Requirements</a> •
+  <a href="#how-to-use">How to Use</a>
+</p>
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
-- A running PostgreSQL instance (local or Neon)
-- A running Redis instance (local or cloud)
+<p align="center">
+  <a href="#development">Development</a> •
+  <a href="#license">License</a>
+</p>
 
-## Setup
+## Key Features
+
+- FastAPI provides the asynchronous API layer.
+- SQLModel and PostgreSQL support application data.
+- Redis supports cache and publish-subscribe workflows.
+- Alembic manages database migrations.
+- Authlib and cookie-based JWT support sign-in and session flows.
+- Domain, admin, partner, and infrastructure folders separate service areas.
+
+## Requirements
+
+- Python 3.12 or later.
+- `uv` for dependency management.
+- A PostgreSQL service.
+- A Redis service.
+- Local values for any configured external service.
+
+## How to Use
+
+Run these commands from the repository root.
 
 ```bash
-# 1. Clone the repo
-git clone <repo-url>
 cd recon-backend
-
-# 2. Install dependencies (uv reads pyproject.toml and manages the venv automatically)
 uv sync
-
-# 3. Copy the environment file and fill in your values
-cp .env.example .env
+touch .env
 ```
 
-Edit `.env` and set at minimum:
+The backend `Settings` class reads `.env` from `recon-backend/` or the repository root. The contributor guide lists database, Redis, application-secret, and Google OAuth settings. The repository does not track an `.env.example` file. Add local values for your services. Keep credentials out of version control.
 
-```
-MODE=development
-DATABASE_USER=postgres
-DATABASE_PASSWORD=postgres
-DATABASE_HOST=localhost
-DATABASE_PORT=5432
-DATABASE_NAME=recon_db
-REDIS_URL=redis://localhost:6379
-SECRET_KEY=<any-random-string>
-GOOGLE_CLIENT_ID=<from-google-console>
-GOOGLE_CLIENT_SECRET=<from-google-console>
-```
-
-## Running the server
+Apply database migrations and start the API.
 
 ```bash
-# From the project root
-uv run uvicorn app.main:app --reload --app-dir backend
-```
-
-The API will be available at `http://localhost:8000`.  
-Interactive docs: `http://localhost:8000/docs`
-
-## Database migrations
-
-```bash
-cd backend
-
-# Create a new migration after model changes
-uv run alembic revision --autogenerate -m "describe your change"
-
-# Apply all pending migrations
 uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+```
 
-# Roll back one migration
+The API listens at `http://localhost:8000`. Open `http://localhost:8000/docs` for interactive API documentation.
+
+## Development
+
+Run backend tests from `recon-backend/`.
+
+```bash
+uv run pytest
+```
+
+Create and apply migrations from the same directory.
+
+```bash
+uv run alembic revision --autogenerate -m "describe your change"
+uv run alembic upgrade head
+```
+
+Roll back one migration only when the change requires it.
+
+```bash
 uv run alembic downgrade -1
 ```
 
-> Alembic discovers models via `app/models/__init__.py`. If you add a new domain model, import it there or it will not be picked up.
+See the [root README](../README.md) for the broader project map and [SECURITY.md](../SECURITY.md) for responsible disclosure.
 
-## Project structure
+## License
 
-Top-level folders are split by **audience**:
+The repository has no root `LICENSE` file. This README assigns no license.
 
-```
-backend/app/
-  domains/           Participant-facing event features — zones, points, schedule, auth, ...
-  admin/             Ops/admin dashboard — aggregated views, overrides, controls
-  partners/          Sponsor/partner dashboard — ROI metrics, footfall, engagement
-  infrastructure/    Technical capabilities — storage (R2), future: cache, realtime
-  utils/             Framework plumbing — deps.py, exceptions.py, rbac.py, models/base.py
-  core/              Config, security, OAuth — do not restructure
-  db/                Async database session setup
-  models/            Alembic aggregator (__init__.py imports all domain models)
-  api/v1/api.py      Mounts all routers
-  main.py            App entry point — lifespan, middleware
-```
+---
 
-See `AGENTS.md` for the full architecture guide, coding conventions, and project state.
+<p align="center">
+  <a href="../README.md">Recon overview</a> •
+  <a href="../recon-frontend/README.md">Frontend guide</a> •
+  <a href="../CONTRIBUTING.md">Contributor guide</a>
+</p>

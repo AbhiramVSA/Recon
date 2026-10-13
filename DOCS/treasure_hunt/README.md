@@ -1,54 +1,72 @@
-# Treasure Hunt
+<h1 align="center">
+  <img src="../../assets/recon-platform-mark.png" width="200" alt="Teal and indigo circular route links four location pins">
+  Treasure Hunt
+</h1>
 
-## Architecture
+<h4 align="center">Team, QR scan, solve, progress, and leaderboard flows in Recon.</h4>
 
-- `POST /api/v1/teams/`
-  Creates a reusable team row plus the creator's membership. No event-specific team table was added.
-- `POST /api/v1/teams/join`
-  Joins an existing team by invite code. A participant can belong to only one team.
-- `GET /api/v1/teams/me`
-  Returns the caller's current team and roster.
-- `GET /api/v1/treasure-hunt/scan/{qr_token}`
-  Resolves a QR token to one active problem for the caller's team.
-- `POST /api/v1/treasure-hunt/problems/{problem_id}/submit`
-  Validates the submitted flag against the DB-stored flag hash, inserts one durable solve row, and updates team progress atomically.
-- `GET /api/v1/treasure-hunt/me/progress`
-  Returns the caller's team progress, solved problems, rank, and finisher slot if completed.
-- `GET /api/v1/treasure-hunt/leaderboard`
-  Ranks teams by `solved_count DESC`, then earliest `completed_at`, then earliest `last_solved_at`.
-- `GET /api/v1/treasure-hunt/finishers`
-  Returns only the first four completion slots.
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-backend/app/domains/treasure_hunt/router/treasure_hunt_router.py"><img alt="Treasure Hunt API routes, from the backend router" src="https://img.shields.io/badge/Treasure_Hunt-API-009688?style=flat-square&amp;logo=fastapi&amp;logoColor=white"></a>
+</p>
 
-## Batch Decision
+<p align="center">
+  <a href="#feature-flow">Feature Flow</a> •
+  <a href="#api-routes">API Routes</a> •
+  <a href="#state-and-ranks">State and Ranks</a>
+</p>
 
-Canonical solve writes are **not batched**.
+<p align="center">
+  <a href="#how-to-use">How to Use</a> •
+  <a href="#license">License</a>
+</p>
 
-Reason:
-- Maximum write volume is tiny: `300 teams * 10 problems = 3000` solve rows.
-- Finish order is prize-critical, so delaying DB writes would weaken correctness for no real scale benefit.
-- The code still keeps leaderboard reads cheap by maintaining `treasure_hunt_team_progress` as the projection row per team.
+The repository has no screenshot from a verified run. This README omits QR images and answer data.
 
-If you want the UI to feel "batchy", poll `/leaderboard` every `3-5s`. Do not batch solve persistence.
+## Feature Flow
 
-## Problem Bank
+1. A participant creates a team or joins one with an invite code.
+2. The service resolves a QR token to one active problem for the participant's team.
+3. The service checks a submitted answer against stored data.
+4. The service records a solve and updates team progress.
+5. Participants can view progress, the leaderboard, and the limited finisher list.
 
-| # | QR Token | Title | Answer Flag |
-|---|---|---|---|
-| 1 | `th-01-shifted-ssid` | Shifted SSID | `RECON{CAESAR_OVER_COFFEE}` |
-| 2 | `th-02-badge-b64` | Badge B64 | `RECON{B64_BADGE_BINGO}` |
-| 3 | `th-03-redirect-maze` | Redirect Maze | `RECON{URLS_CAN_LIE}` |
-| 4 | `th-04-packet-hex` | Packet Hex | `RECON{HEX_DUMPS_TELL_STORIES}` |
-| 5 | `th-05-binary-buzz` | Binary Buzz | `RECON{BITS_BEAT_GUESSES}` |
-| 6 | `th-06-rot13-breach` | ROT13 Breach | `RECON{ROT13_IS_NOT_SECURITY}` |
-| 7 | `th-07-leet-locker` | Leet Locker | `RECON{LEETSPEAK_IS_NOT_ENCRYPTION}` |
-| 8 | `th-08-cookie-crumbs` | Cookie Crumbs | `RECON{COOKIES_SPLIT_SECRETS}` |
-| 9 | `th-09-header-hunt` | Header Hunt | `RECON{READ_THE_HEADERS}` |
-| 10 | `th-10-reverse-rumor` | Reverse Rumor | `RECON{MOBILE_FORENSICS_WINS}` |
+A participant can belong to one team. Team creation uses the current team model.
 
-## QR Payload Base
+## API Routes
 
-The generated QR assets in `DOCS/treasure_hunt/qrs/` currently encode:
+| Method | Route | Purpose |
+| --- | --- | --- |
+| POST | `/api/v1/teams/` | Create a team and add its creator |
+| POST | `/api/v1/teams/join` | Join a team by invite code |
+| GET | `/api/v1/teams/me` | Read the caller's team and roster |
+| GET | `/api/v1/treasure-hunt/scan/{qr_token}` | Resolve a QR token to an active problem |
+| POST | `/api/v1/treasure-hunt/problems/{problem_id}/submit` | Submit an answer for validation |
+| GET | `/api/v1/treasure-hunt/me/progress` | Read team progress, solved problems, rank, and finisher slot |
+| GET | `/api/v1/treasure-hunt/leaderboard` | Read team rankings |
+| GET | `/api/v1/treasure-hunt/finishers` | Read the first four completion slots |
 
-`https://event.example.com/api/v1/treasure-hunt/scan/{qr_token}`
+## State and Ranks
 
-Replace the host before printing for the live event if your public API hostname differs.
+Solve writes are not batched. The service records a solve and updates progress in one transaction.
+
+The leaderboard sorts by solved count, then completion time, then last solve time. The service keeps a progress row per team for leaderboard reads.
+
+The source documentation says a user interface can poll the leaderboard every three to five seconds. It warns against grouped solve writes.
+
+## How to Use
+
+Start with the [backend guide](../../recon-backend/README.md) and [frontend guide](../../recon-frontend/README.md). Read the [frontend feature specification](frontend_spec.md) before you change the flow.
+
+Set the live API host before you create event QR assets. The host shown in the source README is an example host. Replace it for a live event.
+
+## License
+
+The repository has no root `LICENSE` file. See the [root README](../../README.md) for the current legal note.
+
+---
+
+<p align="center">
+  <a href="../../README.md">Recon overview</a> •
+  <a href="../../recon-backend/README.md">Backend guide</a> •
+  <a href="../../recon-frontend/README.md">Frontend guide</a>
+</p>
