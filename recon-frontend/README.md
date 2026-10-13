@@ -1,87 +1,79 @@
-# Recon
+<h1 align="center">
+  <img src="../assets/recon-platform-mark.png" width="200" alt="Teal and indigo circular route links four location pins">
+  Recon Frontend
+</h1>
 
-Recon is a Vite + React + TypeScript web app for the RECON 2026 cybersecurity event experience.
+<h4 align="center">A React and Vite event site with data-driven content and portal views.</h4>
 
-It ships a stylized, animated landing page with section-based content for hero, events, schedule, team, prizes, and footer modules.
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="Node.js 22.x" src="https://img.shields.io/badge/Node.js-22.x-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white"></a>  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&amp;logo=react&amp;logoColor=black"></a>
+</p>
 
-## Features
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="TypeScript 6" src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white"></a>
+</p>
 
-- Single-page event site with modular React components
-- Animated UI and motion effects via Framer Motion
-- Data-driven content in a central source file
-- Utility-first styling with Tailwind CSS (v4)
-- Fast dev/build workflow using Vite
+<p align="center">
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="Vite 8, from package.json" src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&amp;logo=vite&amp;logoColor=white"></a>
+  <a href="https://github.com/AbhiramVSA/Recon/blob/74d9e4bb88f2a9261b82c0619c5852cd4e9f3f9f/recon-frontend/package.json"><img alt="Tailwind CSS 4, from package.json" src="https://img.shields.io/badge/Tailwind-CSS%204-06B6D4?style=flat-square&amp;logo=tailwindcss&amp;logoColor=white"></a>
+</p>
 
-## Tech Stack
+<p align="center">
+  <a href="#key-features">Key Features</a> •
+  <a href="#how-to-use">How to Use</a> •
+  <a href="#scripts">Scripts</a>
+</p>
 
-- React 19
-- TypeScript 6
-- Vite 8
-- Tailwind CSS 4
-- Framer Motion
+<p align="center">
+  <a href="#content-updates">Content Updates</a> •
+  <a href="#license">License</a>
+</p>
 
-## Getting Started
+The repository has no screenshot from a verified browser run.
 
-### Prerequisites
+## Key Features
 
-- Node.js 18+
-- npm 9+
+- A single-page event site uses modular React components.
+- Motion effects use Framer Motion.
+- Event content lives in a central data file.
+- Tailwind CSS styles the interface.
+- Vite provides development and build commands.
 
-### Install
+## How to Use
+
+The package declares Node.js 22.x in its `engines` field. Install dependencies and start the development server.
 
 ```bash
 npm install
-```
-
-### Run in Development
-
-```bash
 npm run dev
 ```
 
-By default, Vite serves the app at <http://localhost:5173>.
-
 ## Scripts
 
-- `npm run dev` - start development server
-- `npm run build` - type-check and build for production
-- `npm run preview` - preview the production build locally
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Vite development server |
+| `npm run test` | Run the Vitest suite |
+| `npm run test:e2e` | Run the Playwright suite |
+| `npm run build` | Type-check and build the site |
+| `npm run preview` | Preview the production build locally |
 
-## Project Structure
-
-```text
-src/
-  App.tsx              # Main page composition
-  data.ts              # Event content (stats, events, schedule, team, partners)
-  hooks.ts             # Shared hooks
-  shader.ts            # Shader/background related logic
-  index.css            # Global styles
-  main.tsx             # App entry point
-  components/
-    Hero.tsx
-    About.tsx
-    Events.tsx
-    Schedule.tsx
-    Team.tsx
-    Prizes.tsx
-    Footer.tsx
-    ...
-```
+These commands come from `package.json`. This draft does not report test results.
 
 ## Content Updates
 
-- Update event copy, stats, schedule, team, and partner data in `src/data.ts`.
-- Update visuals and section behavior in `src/components/*`.
-- Adjust global style tokens/effects in `src/index.css`.
+- Edit event copy, statistics, schedules, team content, and partner content in `src/data.ts`.
+- Edit section visuals and behavior in `src/components/`.
+- Edit global styles and effects in `src/index.css`.
 
-## Build for Production
+## License
 
-```bash
-npm run build
-```
+No root `LICENSE` file exists. The frontend package has no `license` field. This README assigns no license.
 
-The optimized output is generated in the `dist/` folder.
+---
 
-## Notes
-
-No explicit license is currently defined in `package.json`.
+<p align="center">
+  <a href="../README.md">Recon overview</a> •
+  <a href="../recon-backend/README.md">Backend guide</a> •
+  <a href="../CONTRIBUTING.md">Contributor guide</a>
+</p>
