@@ -1,6 +1,19 @@
-# Recon
+<p align="center">
+  <img src="recon-frontend/public/recon-512.png" alt="ReCon 2026 event mark" width="200" />
+</p>
 
-Recon is a split frontend/backend event platform built for a DEFCON-style cybersecurity fest. It combines a FastAPI API, a React client, a points and leaderboard system, participant/team flows, zone registration and check-in, admin operations, partner workflows, and event-specific game mechanics in one repository.
+<h1 align="center">Recon</h1>
+
+<p align="center">Recon is a split frontend/backend event platform built for a DEFCON-style cybersecurity fest. It combines a FastAPI API, a React client, a points and leaderboard system, participant/team flows, zone registration and check-in, admin operations, partner workflows, and event-specific game mechanics in one repository.</p>
+
+<p align="center">
+  <a href="#what-recon-covers">Product scope</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#repository-layout">Repository</a> ·
+  <a href="#documentation-map">Docs</a> ·
+  <a href="#security">Security</a> ·
+  <a href="#license">License</a>
+</p>
 
 This repository is organized as a public, open-source-friendly workspace:
 
@@ -114,7 +127,6 @@ This is not a blank scaffold. It is an actively shaped event platform with real 
 
 ```bash
 cd recon-backend
-cp .env.example .env
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
@@ -130,7 +142,6 @@ Backend defaults:
 
 ```bash
 cd recon-frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
@@ -141,10 +152,11 @@ Frontend default:
 
 ## Configuration
 
-Example environment files are included for both apps:
+This repository does not include `.env.example` files for either app. Create local environment files from the variable names below and the setup examples in each app README.
 
-- [`recon-backend/.env.example`](recon-backend/.env.example)
-- [`recon-frontend/.env.example`](recon-frontend/.env.example)
+- Backend settings: [`recon-backend/README.md`](recon-backend/README.md)
+- Frontend API URL: `VITE_API_BASE_URL`
+- Optional frontend site URL: `VITE_SITE_URL`
 
 The repository does not commit real secrets. Before running locally, configure at minimum:
 
