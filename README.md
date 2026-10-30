@@ -127,7 +127,6 @@ This is not a blank scaffold. It is an actively shaped event platform with real 
 
 ```bash
 cd recon-backend
-cp .env.example .env
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
@@ -143,7 +142,6 @@ Backend defaults:
 
 ```bash
 cd recon-frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
@@ -154,10 +152,11 @@ Frontend default:
 
 ## Configuration
 
-Example environment files are included for both apps:
+This repository does not include `.env.example` files for either app. Create local environment files from the variable names below and the setup examples in each app README.
 
-- [`recon-backend/.env.example`](recon-backend/.env.example)
-- [`recon-frontend/.env.example`](recon-frontend/.env.example)
+- Backend settings: [`recon-backend/README.md`](recon-backend/README.md)
+- Frontend API URL: `VITE_API_BASE_URL`
+- Optional frontend site URL: `VITE_SITE_URL`
 
 The repository does not commit real secrets. Before running locally, configure at minimum:
 
