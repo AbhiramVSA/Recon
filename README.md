@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="recon-frontend/public/recon-512.png" alt="ReCon 2026 event mark" width="144" />
+  <img src="recon-frontend/public/recon-512.png" alt="ReCon 2026 event mark" width="200" />
 </p>
 
-# Recon
+<h1 align="center">Recon</h1>
 
-Recon is a split frontend/backend event platform built for a DEFCON-style cybersecurity fest. It combines a FastAPI API, a React client, a points and leaderboard system, participant/team flows, zone registration and check-in, admin operations, partner workflows, and event-specific game mechanics in one repository.
+<p align="center">Recon is a split frontend/backend event platform built for a DEFCON-style cybersecurity fest. It combines a FastAPI API, a React client, a points and leaderboard system, participant/team flows, zone registration and check-in, admin operations, partner workflows, and event-specific game mechanics in one repository.</p>
 
 <p align="center">
   <a href="#what-recon-covers">Product scope</a> ·
