@@ -1,6 +1,19 @@
+<p align="center">
+  <img src="recon-frontend/public/recon-512.png" alt="ReCon 2026 event mark" width="144" />
+</p>
+
 # Recon
 
 Recon is a split frontend/backend event platform built for a DEFCON-style cybersecurity fest. It combines a FastAPI API, a React client, a points and leaderboard system, participant/team flows, zone registration and check-in, admin operations, partner workflows, and event-specific game mechanics in one repository.
+
+<p align="center">
+  <a href="#what-recon-covers">Product scope</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#repository-layout">Repository</a> ·
+  <a href="#documentation-map">Docs</a> ·
+  <a href="#security">Security</a> ·
+  <a href="#license">License</a>
+</p>
 
 This repository is organized as a public, open-source-friendly workspace:
 
